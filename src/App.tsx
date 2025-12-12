@@ -8,36 +8,26 @@ export default function App() {
     let y = 0;
 
     if (grid) {
-      interact(".draggable")
+      interact(".card")
         .resizable({
           // resize from all edges and corners
           edges: { left: false, right: true, bottom: true },
-
-          listeners: {
-            move(event) {
-              const target = event.target;
-
-              // update the element's style
-              target.style.width = event.rect.width + "px";
-              target.style.height = event.rect.height + "px";
-
-              target.setAttribute("data-x", x);
-              target.setAttribute("data-y", y);
-            },
-          },
           modifiers: [
             // keep the edges inside the parent
             interact.modifiers.restrictEdges({
               outer: "parent",
             }),
-
-            // minimum size
-            interact.modifiers.restrictSize({
-              min: { width: 100, height: 50 },
-            }),
           ],
-
           inertia: true,
+
+          listeners: {
+            move(event) {
+              const target = event.target;
+
+              target.style.width = ((event.rect.width / 16) >> 0) + "rem";
+              target.style.height = ((event.rect.height / 16) >> 0) + "rem";
+            },
+          },
         })
         .draggable({
           modifiers: [
@@ -53,12 +43,32 @@ export default function App() {
             }),
           ],
           inertia: true,
-        })
-        .on("dragmove", function (event) {
-          x += event.dx;
-          y += event.dy;
+          ignoreFrom: "textarea",
 
-          event.target.style.transform = "translate(" + x + "px, " + y + "px)";
+          listeners: {
+            move(event) {
+              x += event.dx;
+              y += event.dy;
+
+              event.target.style.transform =
+                "translate(" + x + "px, " + y + "px)";
+            },
+
+            end(event) {
+              console.log("draggable end", event);
+
+              const target = event.target as HTMLElement;
+
+              target.classList.remove("move");
+              localStorage.setItem("items", JSON.stringify([{ x, y }]));
+            },
+
+            start(event) {
+              const target = event.target as HTMLElement;
+
+              target.classList.add("move");
+            },
+          },
         });
     }
   }, []);
@@ -70,23 +80,13 @@ export default function App() {
         height: "100%",
       }}
     >
-      <div
-        className="draggable"
-        style={{
-          width: "20rem",
-          overflow: "hidden",
-          userSelect: "none",
-          padding: "1rem",
-          border: "1px solid var(--foreground)",
-          backgroundColor: "var(--background)",
-        }}
-      >
-        <p>
+      <div className="card">
+        <textarea>
           Lorem ipsum dolor sit amet consectetur adipisicing elit. Quidem vero
           ipsum tenetur numquam possimus cumque perspiciatis est, neque ut quia,
           incidunt inventore, magni nobis accusamus rerum? Earum asperiores
           officia eum?
-        </p>
+        </textarea>
       </div>
     </div>
   );
