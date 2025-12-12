@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sticky Board</title>
+
+  <style>
+    :root {
+      font-family: system-ui;
+      line-height: 1.5;
+      font-weight: 400;
+
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+
+      color-scheme: light dark;
+      --background: #ffffff;
+      --foreground: #171717;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --background: #171717;
+        --foreground: #ffffff;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 100dvw;
+      height: 100dvh;
+      margin: 0;
+      overflow: hidden;
+      background: var(--background);
+      color: var(--foreground);
+    }
+
+    #root {
+      height: 100%;
+      overflow: hidden;
+
+      /* 点阵背景 */
+      background-image: radial-gradient(var(--foreground) 1px, transparent 1px);
+      background-size: 1rem 1rem;
+      background-position: 0.5rem 0.5rem;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root">
+    <noscript>noscript</noscript>
+  </div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>
