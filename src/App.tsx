@@ -1,11 +1,26 @@
 import { useEffect } from "react";
 import interact from "interactjs";
 
+type Stickys = Record<
+  string,
+  { x: number; y: number; width: number; height: number }
+>;
+
 export default function App() {
+  function save(id: string, data: Record<string, string | number>) {
+    const stickys: Stickys = JSON.parse(
+      localStorage.getItem("stickys") || "{}"
+    );
+
+    stickys[id] = {
+      ...stickys[id],
+      ...data,
+    };
+    localStorage.setItem("stickys", JSON.stringify(stickys));
+  }
+
   useEffect(() => {
     const grid = document.querySelector<HTMLDivElement>("div#grid");
-    let x = 0;
-    let y = 0;
 
     if (grid) {
       interact(".card")
@@ -22,17 +37,27 @@ export default function App() {
 
           listeners: {
             move(event) {
-              const target = event.target;
+              const target = event.target as HTMLElement;
 
-              target.style.width = ((event.rect.width / 16) >> 0) + "rem";
-              target.style.height = ((event.rect.height / 16) >> 0) + "rem";
+              const width = (event.rect.width / 16) >> 0,
+                height = (event.rect.height / 16) >> 0;
+
+              target.style.width = width + "rem";
+              target.style.height = height + "rem";
+
+              target.setAttribute("data-size", `${width},${height}`);
+
+              const id = target.getAttribute("id");
+              if (id) {
+                save(id, { width, height });
+              }
             },
           },
         })
         .draggable({
           modifiers: [
             interact.modifiers.snap({
-              targets: [interact.snappers.grid({ x: 32, y: 32 })],
+              targets: [interact.snappers.grid({ x: 16, y: 16 })],
               range: Infinity,
               relativePoints: [{ x: 0, y: 0 }],
             }),
@@ -47,20 +72,39 @@ export default function App() {
 
           listeners: {
             move(event) {
+              const target = event.target as HTMLElement;
+              let [x, y] = (target.getAttribute("data-xy") || "0,0")
+                .split(",")
+                .map((i) => Number(i));
               x += event.dx;
               y += event.dy;
+              target.style.transform = ` translate(${x}px, ${y}px)`;
+              target.setAttribute("data-xy", `${x},${y}`);
 
-              event.target.style.transform =
-                "translate(" + x + "px, " + y + "px)";
+              const id = target.getAttribute("id");
+              if (id) {
+                save(id, { x, y });
+              }
             },
 
             end(event) {
               console.log("draggable end", event);
 
               const target = event.target as HTMLElement;
+              let [x, y] = (target.getAttribute("data-xy") || "0,0")
+                .split(",")
+                .map((i) => Number(i));
+              x += event.dx;
+              y += event.dy;
+              target.style.transform = ` translate(${x}px, ${y}px)`;
+              target.setAttribute("data-xy", `${x},${y}`);
 
               target.classList.remove("move");
-              localStorage.setItem("items", JSON.stringify([{ x, y }]));
+
+              const id = target.getAttribute("id");
+              if (id) {
+                save(id, { x, y });
+              }
             },
 
             start(event) {
@@ -80,13 +124,15 @@ export default function App() {
         height: "100%",
       }}
     >
-      <div className="card">
-        <textarea>
-          Lorem ipsum dolor sit amet consectetur adipisicing elit. Quidem vero
-          ipsum tenetur numquam possimus cumque perspiciatis est, neque ut quia,
-          incidunt inventore, magni nobis accusamus rerum? Earum asperiores
-          officia eum?
-        </textarea>
+      <div
+        className="card"
+        id="1"
+      >
+        <textarea
+          defaultValue={
+            "Lorem ipsum dolor sit amet consectetur adipisicing elit. Quidem vero ipsum tenetur numquam possimus cumque perspiciatis est, neque ut quia, incidunt inventore, magni nobis accusamus rerum? Earum asperiores officia eum?"
+          }
+        ></textarea>
       </div>
     </div>
   );
