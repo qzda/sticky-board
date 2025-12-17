@@ -1,4 +1,33 @@
 import interact from "interactjs";
+import settings from "./assets/settings.svg?raw";
+import download from "./assets/download.svg?raw";
+import upload from "./assets/upload.svg?raw";
+import github from "./assets/github.svg?raw";
+
+// 在文件顶部添加语言检测函数
+function getLanguage(): "zh" | "en" {
+  const lang = navigator.language.toLowerCase();
+  return lang.startsWith("zh") ? "zh" : "en";
+}
+
+const texts = {
+  zh: {
+    deleteConfirm: "确定要删除这个便签吗？",
+    invalidFormat: "无效的文件格式",
+    importConfirm: (importCount: number, existingIds: number, newIds: number) =>
+      `发现 ${importCount} 个便签：\n- ${existingIds} 个现有便签将被更新\n- ${newIds} 个新便签将被添加\n\n继续？`,
+    parseFailed: "解析 JSON 文件失败",
+  },
+  en: {
+    deleteConfirm: "Are you sure you want to delete this note?",
+    invalidFormat: "Invalid file format",
+    importConfirm: (importCount: number, existingIds: number, newIds: number) =>
+      `Found ${importCount} note(s):\n- ${existingIds} existing note(s) will be updated\n- ${newIds} new note(s) will be added\n\nContinue?`,
+    parseFailed: "Failed to parse JSON file",
+  },
+};
+
+const t = texts[getLanguage()];
 
 type Stickys = Record<
   string,
@@ -40,7 +69,7 @@ function createCard(x: number, y: number): HTMLDivElement {
 
   deleteBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    if (confirm("确定要删除这个便签吗？")) {
+    if (confirm(t.deleteConfirm)) {
       deleteCard(id);
       card.remove();
     }
@@ -181,7 +210,7 @@ Object.entries(stickys).forEach(([id, data]) => {
 
   deleteBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    if (confirm("确定要删除这个便签吗？")) {
+    if (confirm(t.deleteConfirm)) {
       deleteCard(id);
       card.remove();
     }
@@ -198,6 +227,135 @@ Object.entries(stickys).forEach(([id, data]) => {
   card.appendChild(deleteBtn);
   card.appendChild(textarea);
   grid.appendChild(card);
+});
+
+const settingsContainer = document.querySelector<HTMLDivElement>("#settings")!;
+
+// 工具函数：将 SVG 字符串转换为 SVG 元素
+function createSvgElement(
+  svgString: string,
+  attrs?: Record<string, string>
+): SVGElement {
+  const parser = new DOMParser();
+  const svgDoc = parser.parseFromString(svgString, "image/svg+xml");
+  const svg = svgDoc.querySelector("svg");
+
+  if (!svg) throw new Error("Invalid SVG string");
+
+  // 设置默认属性
+  svg.setAttribute("width", "24");
+  svg.setAttribute("height", "24");
+
+  // 添加自定义属性
+  if (attrs) {
+    Object.entries(attrs).forEach(([key, value]) => {
+      svg.setAttribute(key, value);
+    });
+  }
+
+  return svg as SVGElement;
+}
+// 创建 SVG 元素
+const downloadIcon = createSvgElement(download, {
+  alt: "download",
+  style: "display: none;",
+});
+const uploadIcon = createSvgElement(upload, {
+  alt: "upload",
+  style: "display: none;",
+});
+const settingsIcon = createSvgElement(settings, {
+  alt: "settings",
+});
+
+// 创建 GitHub 链接
+const githubLink = document.createElement("a");
+githubLink.href = "https://github.com/qzda";
+githubLink.target = "_blank";
+githubLink.appendChild(createSvgElement(github, { alt: "github" }));
+
+// 添加到容器
+settingsContainer.appendChild(downloadIcon);
+settingsContainer.appendChild(uploadIcon);
+settingsContainer.appendChild(settingsIcon);
+settingsContainer.appendChild(githubLink);
+
+let isExpanded = false;
+// 点击 settings 按钮展开/收起
+settingsIcon.addEventListener("click", () => {
+  isExpanded = !isExpanded;
+  downloadIcon.style.display = isExpanded ? "block" : "none";
+  uploadIcon.style.display = isExpanded ? "block" : "none";
+});
+
+// 导出功能
+downloadIcon.addEventListener("click", () => {
+  const stickys = localStorage.getItem("stickys") || "{}";
+  const timestamp = Date.now();
+  const filename = `stickys-${timestamp}.json`;
+
+  const blob = new Blob([stickys], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// 导入功能
+uploadIcon.addEventListener("click", () => {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".json";
+
+  input.addEventListener("change", (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result as string;
+        const importedData = JSON.parse(content);
+
+        // 验证数据格式
+        if (typeof importedData !== "object" || importedData === null) {
+          alert("Invalid file format");
+          return;
+        }
+
+        // 获取现有数据
+        const existingStickys: Stickys = JSON.parse(
+          localStorage.getItem("stickys") || "{}"
+        );
+
+        // 合并数据：相同 id 则修改，不同 id 则新增
+        const mergedStickys = { ...existingStickys, ...importedData };
+
+        // 确认导入
+        const importCount = Object.keys(importedData).length;
+        const existingIds = Object.keys(existingStickys).filter(
+          (id) => id in importedData
+        ).length;
+        const newIds = importCount - existingIds;
+
+        const message = t.importConfirm(importCount, existingIds, newIds);
+
+        if (confirm(message)) {
+          localStorage.setItem("stickys", JSON.stringify(mergedStickys));
+          // 刷新页面以加载新数据
+          location.reload();
+        }
+      } catch (error) {
+        alert("Failed to parse JSON file");
+        console.error(error);
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  input.click();
 });
 
 // 配置 interact.js
@@ -287,89 +445,3 @@ interact(".card")
       },
     },
   });
-
-const settingsContainer = document.querySelector<HTMLDivElement>("#settings")!;
-const settingsBtn = settingsContainer.querySelector('img[alt="settings"]');
-const downloadBtn = settingsContainer.querySelector('img[alt="download"]');
-const uploadBtn = settingsContainer.querySelector('img[alt="upload"]');
-
-let isExpanded = false;
-
-// 点击 settings 按钮展开/收起
-settingsBtn?.addEventListener("click", () => {
-  isExpanded = !isExpanded;
-  if (downloadBtn && uploadBtn) {
-    (downloadBtn as HTMLElement).style.display = isExpanded ? "block" : "none";
-    (uploadBtn as HTMLElement).style.display = isExpanded ? "block" : "none";
-  }
-});
-
-// 导出功能
-downloadBtn?.addEventListener("click", () => {
-  const stickys = localStorage.getItem("stickys") || "{}";
-  const timestamp = Date.now();
-  const filename = `stickys-${timestamp}.json`;
-
-  const blob = new Blob([stickys], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-});
-
-// 导入功能
-uploadBtn?.addEventListener("click", () => {
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = ".json";
-
-  input.addEventListener("change", (e) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const content = event.target?.result as string;
-        const importedData = JSON.parse(content);
-
-        // 验证数据格式
-        if (typeof importedData !== "object" || importedData === null) {
-          alert("Invalid file format");
-          return;
-        }
-
-        // 获取现有数据
-        const existingStickys: Stickys = JSON.parse(
-          localStorage.getItem("stickys") || "{}"
-        );
-
-        // 合并数据：相同 id 则修改，不同 id 则新增
-        const mergedStickys = { ...existingStickys, ...importedData };
-
-        // 确认导入
-        const importCount = Object.keys(importedData).length;
-        const existingIds = Object.keys(existingStickys).filter(
-          (id) => id in importedData
-        ).length;
-        const newIds = importCount - existingIds;
-
-        const message = `Found ${importCount} note(s):\n- ${existingIds} existing note(s) will be updated\n- ${newIds} new note(s) will be added\n\nContinue?`;
-
-        if (confirm(message)) {
-          localStorage.setItem("stickys", JSON.stringify(mergedStickys));
-          // 刷新页面以加载新数据
-          location.reload();
-        }
-      } catch (error) {
-        alert("Failed to parse JSON file");
-        console.error(error);
-      }
-    };
-    reader.readAsText(file);
-  });
-
-  input.click();
-});

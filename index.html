@@ -134,8 +134,9 @@
       width: inherit;
     }
 
-    #settings img {
-      width: inherit;
+    #settings svg,
+    a {
+      color: inherit;
     }
 
     #settings>*:hover {
@@ -149,19 +150,7 @@
     <noscript>noscript</noscript>
   </div>
 
-  <div id="info">
-
-  </div>
-
-  <div id="settings">
-    <img src="/download.svg" style="display: none;" alt="download">
-    <img src="/upload.svg" style="display: none;" alt="upload">
-    <img src="/settings.svg" alt="settings">
-
-    <a href="https://github.com/qzda" target="_blank">
-      <img src="/github.svg" alt="github">
-    </a>
-  </div>
+  <div id="settings"></div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 
