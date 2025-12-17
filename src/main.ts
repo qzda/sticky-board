@@ -161,6 +161,45 @@ grid.addEventListener("mouseup", () => {
   }
 });
 
+// 加载已保存的便签
+const stickys: Stickys = JSON.parse(localStorage.getItem("stickys") || "{}");
+Object.entries(stickys).forEach(([id, data]) => {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.id = id;
+  card.setAttribute("data-xy", `${data.x},${data.y}`);
+  card.setAttribute("data-size", `${data.width},${data.height}`);
+  card.style.transform = `translate(${data.x}px, ${data.y}px)`;
+  card.style.position = "absolute";
+  card.style.width = `${data.width}rem`;
+  card.style.height = `${data.height}rem`;
+
+  // 创建删除按钮
+  const deleteBtn = document.createElement("button");
+  deleteBtn.textContent = "×";
+  deleteBtn.className = "delete-btn";
+
+  deleteBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (confirm("确定要删除这个便签吗？")) {
+      deleteCard(id);
+      card.remove();
+    }
+  });
+
+  const textarea = document.createElement("textarea");
+  textarea.id = id;
+  textarea.value = data.text || defaultText;
+  textarea.addEventListener("input", (e) => {
+    const target = e.target as HTMLTextAreaElement;
+    save(id, { text: target.value });
+  });
+
+  card.appendChild(deleteBtn);
+  card.appendChild(textarea);
+  grid.appendChild(card);
+});
+
 // 配置 interact.js
 interact(".card")
   .resizable({
@@ -249,41 +288,88 @@ interact(".card")
     },
   });
 
-// 加载已保存的便签
-const stickys: Stickys = JSON.parse(localStorage.getItem("stickys") || "{}");
-Object.entries(stickys).forEach(([id, data]) => {
-  const card = document.createElement("div");
-  card.className = "card";
-  card.id = id;
-  card.setAttribute("data-xy", `${data.x},${data.y}`);
-  card.setAttribute("data-size", `${data.width},${data.height}`);
-  card.style.transform = `translate(${data.x}px, ${data.y}px)`;
-  card.style.position = "absolute";
-  card.style.width = `${data.width}rem`;
-  card.style.height = `${data.height}rem`;
+const settingsContainer = document.querySelector<HTMLDivElement>("#settings")!;
+const settingsBtn = settingsContainer.querySelector('img[alt="settings"]');
+const downloadBtn = settingsContainer.querySelector('img[alt="download"]');
+const uploadBtn = settingsContainer.querySelector('img[alt="upload"]');
 
-  // 创建删除按钮
-  const deleteBtn = document.createElement("button");
-  deleteBtn.textContent = "×";
-  deleteBtn.className = "delete-btn";
+let isExpanded = false;
 
-  deleteBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (confirm("确定要删除这个便签吗？")) {
-      deleteCard(id);
-      card.remove();
-    }
+// 点击 settings 按钮展开/收起
+settingsBtn?.addEventListener("click", () => {
+  isExpanded = !isExpanded;
+  if (downloadBtn && uploadBtn) {
+    (downloadBtn as HTMLElement).style.display = isExpanded ? "block" : "none";
+    (uploadBtn as HTMLElement).style.display = isExpanded ? "block" : "none";
+  }
+});
+
+// 导出功能
+downloadBtn?.addEventListener("click", () => {
+  const stickys = localStorage.getItem("stickys") || "{}";
+  const timestamp = Date.now();
+  const filename = `stickys-${timestamp}.json`;
+
+  const blob = new Blob([stickys], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// 导入功能
+uploadBtn?.addEventListener("click", () => {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".json";
+
+  input.addEventListener("change", (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result as string;
+        const importedData = JSON.parse(content);
+
+        // 验证数据格式
+        if (typeof importedData !== "object" || importedData === null) {
+          alert("Invalid file format");
+          return;
+        }
+
+        // 获取现有数据
+        const existingStickys: Stickys = JSON.parse(
+          localStorage.getItem("stickys") || "{}"
+        );
+
+        // 合并数据：相同 id 则修改，不同 id 则新增
+        const mergedStickys = { ...existingStickys, ...importedData };
+
+        // 确认导入
+        const importCount = Object.keys(importedData).length;
+        const existingIds = Object.keys(existingStickys).filter(
+          (id) => id in importedData
+        ).length;
+        const newIds = importCount - existingIds;
+
+        const message = `Found ${importCount} note(s):\n- ${existingIds} existing note(s) will be updated\n- ${newIds} new note(s) will be added\n\nContinue?`;
+
+        if (confirm(message)) {
+          localStorage.setItem("stickys", JSON.stringify(mergedStickys));
+          // 刷新页面以加载新数据
+          location.reload();
+        }
+      } catch (error) {
+        alert("Failed to parse JSON file");
+        console.error(error);
+      }
+    };
+    reader.readAsText(file);
   });
 
-  const textarea = document.createElement("textarea");
-  textarea.id = id;
-  textarea.value = data.text || defaultText;
-  textarea.addEventListener("input", (e) => {
-    const target = e.target as HTMLTextAreaElement;
-    save(id, { text: target.value });
-  });
-
-  card.appendChild(deleteBtn);
-  card.appendChild(textarea);
-  grid.appendChild(card);
+  input.click();
 });

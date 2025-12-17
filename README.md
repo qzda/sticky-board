@@ -13,6 +13,7 @@ A clean and elegant web-based sticky notes board application with support for dr
 - 🌓 **Dark Mode** - Automatically adapts to system theme
 - 📐 **Grid Alignment** - All operations automatically snap to grid
 - 🔒 **Data Privacy** - All data is stored locally in browser only
+- 📤 **Export/Import** - Export notes to JSON file or import from existing files
 
 ## 📖 Usage
 
@@ -45,6 +46,15 @@ A clean and elegant web-based sticky notes board application with support for dr
 - Click the "×" button in the top-right corner of the note
 - Click "OK" in the confirmation dialog
 
+### Export/Import Notes
+
+- Click the **settings** button in the bottom-right corner to expand options
+- **Export**: Click the download button to save all notes as a JSON file (filename: stickys-[timestamp].json)
+- **Import**: Click the upload button to import notes from a JSON file
+  - Notes with same ID will be updated
+  - Notes with new ID will be added
+  - Existing notes not in the import file will be preserved
+
 ## 🚀 Dev
 
 ### Install Dependencies
@@ -62,7 +72,7 @@ Issues and Pull Requests are welcome!
 
 - [ ] Support custom note colors
 - [ ] Support note groups/tags
-- [ ] Support export/import note data
+- [x] Support export/import note data
 - [ ] Support keyboard shortcuts
 - [ ] Support multi-select and batch operations
 - [ ] Support undo/redo functionality
