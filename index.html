@@ -111,7 +111,37 @@
       box-shadow: 1rem 1rem rgba(128, 128, 128, 0.5);
     }
 
-    .card .delete-btn {
+    .card textarea {
+      width: 100%;
+      height: 100%;
+      border: none;
+      outline: none;
+      resize: none;
+      overflow: hidden;
+      background-color: transparent;
+
+      cursor: text !important;
+    }
+
+    .card .preview {
+      width: 100%;
+      height: 100%;
+      padding: 0.5rem;
+      overflow: auto;
+      word-wrap: break-word;
+      white-space: pre-wrap;
+    }
+
+    .card .preview a {
+      color: #0066cc;
+      text-decoration: underline;
+    }
+
+    .card .preview a:hover {
+      color: #0052a3;
+    }
+
+    .card button {
       position: absolute;
       top: -1rem;
       right: 0;
@@ -131,20 +161,12 @@
       z-index: 10;
     }
 
-    .card .delete-btn:hover {
-      opacity: 1;
+    .card .edit-btn {
+      right: 1.25rem;
     }
 
-    .card textarea {
-      width: 100%;
-      height: 100%;
-      border: none;
-      outline: none;
-      resize: none;
-      overflow: hidden;
-      background-color: transparent;
-
-      cursor: text !important;
+    .card button:hover {
+      opacity: 1;
     }
 
     #settings {

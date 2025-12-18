@@ -56,6 +56,79 @@ function deleteCard(id: string) {
   localStorage.setItem("stickys", JSON.stringify(stickys));
 }
 
+// 将文本转换为带链接的 HTML
+function textToHtml(text: string): string {
+  let html = text;
+
+  // 1️⃣ 转义 HTML（防止 XSS，保留最基础）
+  html = html
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  // 2️⃣ 标题 # ~ ######
+  html = html.replace(
+    /^(#{1,6})\s+(.*)$/gm,
+    (_, level: string, content: string) =>
+      `<h${level.length}>${content}</h${level.length}>`
+  );
+
+  // 3️⃣ 有序列表
+  html = html.replace(/(?:^|\n)((?:\d+\.\s+.*(?:\n|$))+)/g, (match) => {
+    const items = match
+      .trim()
+      .split("\n")
+      .map((line) => line.replace(/^\d+\.\s+/, "").trim())
+      .map((item) => `<li>${item}</li>`)
+      .join("");
+    return `<ol>${items}</ol>`;
+  });
+
+  // 4️⃣ 无序列表 (- * +)
+  html = html.replace(/(?:^|\n)((?:[-*+]\s+.*(?:\n|$))+)/g, (match) => {
+    const items = match
+      .trim()
+      .split("\n")
+      .map((line) => line.replace(/^[-*+]\s+/, "").trim())
+      .map((item) => `<li>${item}</li>`)
+      .join("");
+    return `<ul>${items}</ul>`;
+  });
+
+  // 5️⃣ 链接
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  html = html.replace(
+    urlRegex,
+    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+  );
+
+  // 6️⃣ 换行
+  html = html.replace(/\n/g, "<br />");
+
+  return html;
+}
+
+// 切换编辑/预览模式
+function toggleEditMode(card: HTMLElement, isEditing: boolean) {
+  const textarea = card.querySelector("textarea") as HTMLTextAreaElement;
+  const preview = card.querySelector(".preview") as HTMLDivElement;
+  const editBtn = card.querySelector(".edit-btn") as HTMLButtonElement;
+
+  if (isEditing) {
+    // 切换到编辑模式
+    textarea.style.display = "block";
+    preview.style.display = "none";
+    editBtn.textContent = "✓";
+    textarea.focus();
+  } else {
+    // 切换到预览模式
+    textarea.style.display = "none";
+    preview.style.display = "block";
+    editBtn.textContent = "+";
+    preview.innerHTML = textToHtml(textarea.value);
+  }
+}
+
 function createCard(x: number, y: number): HTMLDivElement {
   const id = `${Date.now()}`;
   const zIndex = getMaxZIndex() + 1;
@@ -70,6 +143,11 @@ function createCard(x: number, y: number): HTMLDivElement {
   card.style.position = "absolute";
   card.style.zIndex = `${zIndex}`;
 
+  // 创建编辑按钮
+  const editBtn = document.createElement("button");
+  editBtn.textContent = "+";
+  editBtn.className = "edit-btn";
+
   // 创建删除按钮
   const deleteBtn = document.createElement("button");
   deleteBtn.textContent = "×";
@@ -83,16 +161,32 @@ function createCard(x: number, y: number): HTMLDivElement {
     }
   });
 
+  // 创建 textarea（编辑模式）
   const textarea = document.createElement("textarea");
   textarea.id = id;
   textarea.value = defaultText;
+  textarea.style.display = "none"; // 默认隐藏
   textarea.addEventListener("input", (e) => {
     const target = e.target as HTMLTextAreaElement;
     save(id, { text: target.value });
   });
 
+  // 创建预览区域（预览模式）
+  const preview = document.createElement("div");
+  preview.className = "preview";
+  preview.innerHTML = textToHtml(defaultText);
+
+  // 编辑按钮点击事件
+  editBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isCurrentlyEditing = textarea.style.display === "block";
+    toggleEditMode(card, !isCurrentlyEditing);
+  });
+
+  card.appendChild(editBtn);
   card.appendChild(deleteBtn);
   card.appendChild(textarea);
+  card.appendChild(preview);
 
   // 保存初始状态
   save(id, { x, y, width: 20, height: 10, text: textarea.value, zIndex });
@@ -220,6 +314,11 @@ Object.entries(stickys).forEach(([id, data]) => {
   card.style.height = `${data.height}rem`;
   card.style.zIndex = `${zIndex}`;
 
+  // 创建编辑按钮
+  const editBtn = document.createElement("button");
+  editBtn.textContent = "+";
+  editBtn.className = "edit-btn";
+
   // 创建删除按钮
   const deleteBtn = document.createElement("button");
   deleteBtn.textContent = "×";
@@ -233,16 +332,32 @@ Object.entries(stickys).forEach(([id, data]) => {
     }
   });
 
+  // 创建 textarea（编辑模式）
   const textarea = document.createElement("textarea");
   textarea.id = id;
   textarea.value = data.text || defaultText;
+  textarea.style.display = "none"; // 默认隐藏
   textarea.addEventListener("input", (e) => {
     const target = e.target as HTMLTextAreaElement;
     save(id, { text: target.value });
   });
 
+  // 创建预览区域（预览模式）
+  const preview = document.createElement("div");
+  preview.className = "preview";
+  preview.innerHTML = textToHtml(data.text || defaultText);
+
+  // 编辑按钮点击事件
+  editBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isCurrentlyEditing = textarea.style.display === "block";
+    toggleEditMode(card, !isCurrentlyEditing);
+  });
+
+  card.appendChild(editBtn);
   card.appendChild(deleteBtn);
   card.appendChild(textarea);
+  card.appendChild(preview);
   grid.appendChild(card);
 });
 
@@ -415,7 +530,7 @@ interact(".card")
       }),
     ],
     inertia: true,
-    ignoreFrom: "textarea",
+    ignoreFrom: "textarea, .preview",
 
     listeners: {
       move(event) {
