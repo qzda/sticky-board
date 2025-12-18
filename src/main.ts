@@ -31,14 +31,19 @@ const t = texts[getLanguage()];
 
 type Stickys = Record<
   string,
-  { x: number; y: number; width: number; height: number; text: string }
+  {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    text: string;
+    zIndex: number;
+  }
 >;
 
 const defaultText = "Hi naonao :)";
 
 function save(id: string, data: Record<string, string | number>) {
-  const stickys: Stickys = JSON.parse(localStorage.getItem("stickys") || "{}");
-
   stickys[id] = {
     ...stickys[id],
     ...data,
@@ -47,20 +52,23 @@ function save(id: string, data: Record<string, string | number>) {
 }
 
 function deleteCard(id: string) {
-  const stickys: Stickys = JSON.parse(localStorage.getItem("stickys") || "{}");
   delete stickys[id];
   localStorage.setItem("stickys", JSON.stringify(stickys));
 }
 
 function createCard(x: number, y: number): HTMLDivElement {
   const id = `${Date.now()}`;
+  const zIndex = getMaxZIndex() + 1;
+
   const card = document.createElement("div");
   card.className = "card";
   card.id = id;
   card.setAttribute("data-xy", `${x},${y}`);
   card.setAttribute("data-size", "20,10");
+  card.setAttribute("data-zindex", `${zIndex}`);
   card.style.transform = `translate(${x}px, ${y}px)`;
   card.style.position = "absolute";
+  card.style.zIndex = `${zIndex}`;
 
   // 创建删除按钮
   const deleteBtn = document.createElement("button");
@@ -87,7 +95,7 @@ function createCard(x: number, y: number): HTMLDivElement {
   card.appendChild(textarea);
 
   // 保存初始状态
-  save(id, { x, y, width: 20, height: 10, text: textarea.value });
+  save(id, { x, y, width: 20, height: 10, text: textarea.value, zIndex });
 
   return card;
 }
@@ -190,18 +198,27 @@ grid.addEventListener("mouseup", () => {
   }
 });
 
+// 获取最大的 zIndex
+function getMaxZIndex(): number {
+  const zIndexes = Object.values(stickys).map((s) => s.zIndex || 1);
+  return zIndexes.length > 0 ? Math.max(...zIndexes) : 1;
+}
 // 加载已保存的便签
-const stickys: Stickys = JSON.parse(localStorage.getItem("stickys") || "{}");
+let stickys: Stickys = JSON.parse(localStorage.getItem("stickys") || "{}");
 Object.entries(stickys).forEach(([id, data]) => {
+  const zIndex = data.zIndex || 1;
+
   const card = document.createElement("div");
   card.className = "card";
   card.id = id;
   card.setAttribute("data-xy", `${data.x},${data.y}`);
   card.setAttribute("data-size", `${data.width},${data.height}`);
+  card.setAttribute("data-zindex", `${zIndex}`);
   card.style.transform = `translate(${data.x}px, ${data.y}px)`;
   card.style.position = "absolute";
   card.style.width = `${data.width}rem`;
   card.style.height = `${data.height}rem`;
+  card.style.zIndex = `${zIndex}`;
 
   // 创建删除按钮
   const deleteBtn = document.createElement("button");
@@ -290,11 +307,11 @@ settingsIcon.addEventListener("click", () => {
 
 // 导出功能
 downloadIcon.addEventListener("click", () => {
-  const stickys = localStorage.getItem("stickys") || "{}";
+  const stickysData = localStorage.getItem("stickys") || "{}";
   const timestamp = Date.now();
   const filename = `stickys-${timestamp}.json`;
 
-  const blob = new Blob([stickys], { type: "application/json" });
+  const blob = new Blob([stickysData], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -321,21 +338,16 @@ uploadIcon.addEventListener("click", () => {
 
         // 验证数据格式
         if (typeof importedData !== "object" || importedData === null) {
-          alert("Invalid file format");
+          alert(t.invalidFormat);
           return;
         }
 
-        // 获取现有数据
-        const existingStickys: Stickys = JSON.parse(
-          localStorage.getItem("stickys") || "{}"
-        );
-
         // 合并数据：相同 id 则修改，不同 id 则新增
-        const mergedStickys = { ...existingStickys, ...importedData };
+        const mergedStickys = { ...stickys, ...importedData };
 
         // 确认导入
         const importCount = Object.keys(importedData).length;
-        const existingIds = Object.keys(existingStickys).filter(
+        const existingIds = Object.keys(stickys).filter(
           (id) => id in importedData
         ).length;
         const newIds = importCount - existingIds;
@@ -343,12 +355,13 @@ uploadIcon.addEventListener("click", () => {
         const message = t.importConfirm(importCount, existingIds, newIds);
 
         if (confirm(message)) {
-          localStorage.setItem("stickys", JSON.stringify(mergedStickys));
+          stickys = mergedStickys;
+          localStorage.setItem("stickys", JSON.stringify(stickys));
           // 刷新页面以加载新数据
           location.reload();
         }
       } catch (error) {
-        alert("Failed to parse JSON file");
+        alert(t.parseFailed);
         console.error(error);
       }
     };
@@ -442,6 +455,16 @@ interact(".card")
       start(event) {
         const target = event.target as HTMLElement;
         target.classList.add("move");
+
+        // 设置为最大 zIndex
+        const maxZIndex = getMaxZIndex() + 1;
+        target.style.zIndex = `${maxZIndex}`;
+        target.setAttribute("data-zindex", `${maxZIndex}`);
+
+        const id = target.getAttribute("id");
+        if (id) {
+          save(id, { zIndex: maxZIndex });
+        }
       },
     },
   });
