@@ -482,12 +482,23 @@ interact(".card")
       start(event) {
         const target = event.target as HTMLElement;
         target.classList.add("move");
+        document.body.classList.add("move");
+
+        // 设置为最大 zIndex
+        const maxZIndex = getMaxZIndex() + 1;
+        target.style.zIndex = `${maxZIndex}`;
+        target.setAttribute("data-zindex", `${maxZIndex}`);
+
+        const id = target.getAttribute("id");
+        if (id) {
+          save(id, { zIndex: maxZIndex });
+        }
       },
 
       end(event) {
         const target = event.target as HTMLElement;
-
         target.classList.remove("move");
+        document.body.classList.remove("move");
       },
 
       move(event) {
@@ -528,6 +539,7 @@ interact(".card")
       start(event) {
         const target = event.target as HTMLElement;
         target.classList.add("move");
+        document.body.classList.add("move");
 
         // 设置为最大 zIndex
         const maxZIndex = getMaxZIndex() + 1;
@@ -542,6 +554,9 @@ interact(".card")
 
       end(event) {
         const target = event.target as HTMLElement;
+        target.classList.remove("move");
+        document.body.classList.remove("move");
+
         let [x, y] = (target.getAttribute("data-xy") || "0,0")
           .split(",")
           .map((i) => Number(i));
@@ -549,8 +564,6 @@ interact(".card")
         y += event.dy;
         target.style.transform = `translate(${x}px, ${y}px)`;
         target.setAttribute("data-xy", `${x},${y}`);
-
-        target.classList.remove("move");
 
         const id = target.getAttribute("id");
         if (id) {
