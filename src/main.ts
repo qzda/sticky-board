@@ -479,6 +479,17 @@ interact(".card")
     inertia: true,
 
     listeners: {
+      start(event) {
+        const target = event.target as HTMLElement;
+        target.classList.add("move");
+      },
+
+      end(event) {
+        const target = event.target as HTMLElement;
+
+        target.classList.remove("move");
+      },
+
       move(event) {
         const target = event.target as HTMLElement;
 
@@ -514,19 +525,18 @@ interact(".card")
     ignoreFrom: "textarea, .preview",
 
     listeners: {
-      move(event) {
+      start(event) {
         const target = event.target as HTMLElement;
-        let [x, y] = (target.getAttribute("data-xy") || "0,0")
-          .split(",")
-          .map((i) => Number(i));
-        x += event.dx;
-        y += event.dy;
-        target.style.transform = `translate(${x}px, ${y}px)`;
-        target.setAttribute("data-xy", `${x},${y}`);
+        target.classList.add("move");
+
+        // 设置为最大 zIndex
+        const maxZIndex = getMaxZIndex() + 1;
+        target.style.zIndex = `${maxZIndex}`;
+        target.setAttribute("data-zindex", `${maxZIndex}`);
 
         const id = target.getAttribute("id");
         if (id) {
-          save(id, { x, y });
+          save(id, { zIndex: maxZIndex });
         }
       },
 
@@ -548,18 +558,19 @@ interact(".card")
         }
       },
 
-      start(event) {
+      move(event) {
         const target = event.target as HTMLElement;
-        target.classList.add("move");
-
-        // 设置为最大 zIndex
-        const maxZIndex = getMaxZIndex() + 1;
-        target.style.zIndex = `${maxZIndex}`;
-        target.setAttribute("data-zindex", `${maxZIndex}`);
+        let [x, y] = (target.getAttribute("data-xy") || "0,0")
+          .split(",")
+          .map((i) => Number(i));
+        x += event.dx;
+        y += event.dy;
+        target.style.transform = `translate(${x}px, ${y}px)`;
+        target.setAttribute("data-xy", `${x},${y}`);
 
         const id = target.getAttribute("id");
         if (id) {
-          save(id, { zIndex: maxZIndex });
+          save(id, { x, y });
         }
       },
     },
