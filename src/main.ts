@@ -1,4 +1,6 @@
 import interact from "interactjs";
+import MarkdownIt from "markdown-it";
+
 import settings from "./assets/settings.svg?raw";
 import download from "./assets/download.svg?raw";
 import upload from "./assets/upload.svg?raw";
@@ -41,7 +43,7 @@ type Stickys = Record<
   }
 >;
 
-const defaultText = "Hi naonao :)";
+const defaultText = "[Hi naonao :)](https://github.com/qzda/sticky-board)";
 
 function save(id: string, data: Record<string, string | number>) {
   stickys[id] = {
@@ -56,56 +58,35 @@ function deleteCard(id: string) {
   localStorage.setItem("stickys", JSON.stringify(stickys));
 }
 
+const md = new MarkdownIt({
+  linkify: true, // 自动识别 URL
+  breaks: true, // 换行转 <br>
+});
+
+// 所有链接在新窗口打开
+md.renderer.rules.link_open = (tokens, idx, options, _env, self) => {
+  const token = tokens[idx];
+
+  const targetIndex = token.attrIndex("target");
+  if (targetIndex < 0) {
+    token.attrPush(["target", "_blank"]);
+  } else {
+    token.attrs![targetIndex][1] = "_blank";
+  }
+
+  const relIndex = token.attrIndex("rel");
+  if (relIndex < 0) {
+    token.attrPush(["rel", "noopener noreferrer"]);
+  } else {
+    token.attrs![relIndex][1] = "noopener noreferrer";
+  }
+
+  return self.renderToken(tokens, idx, options);
+};
+
 // 将文本转换为带链接的 HTML
 function textToHtml(text: string): string {
-  let html = text;
-
-  // 1️⃣ 转义 HTML（防止 XSS，保留最基础）
-  html = html
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-
-  // 2️⃣ 标题 # ~ ######
-  html = html.replace(
-    /^(#{1,6})\s+(.*)$/gm,
-    (_, level: string, content: string) =>
-      `<h${level.length}>${content}</h${level.length}>`
-  );
-
-  // 3️⃣ 有序列表
-  html = html.replace(/(?:^|\n)((?:\d+\.\s+.*(?:\n|$))+)/g, (match) => {
-    const items = match
-      .trim()
-      .split("\n")
-      .map((line) => line.replace(/^\d+\.\s+/, "").trim())
-      .map((item) => `<li>${item}</li>`)
-      .join("");
-    return `<ol>${items}</ol>`;
-  });
-
-  // 4️⃣ 无序列表 (- * +)
-  html = html.replace(/(?:^|\n)((?:[-*+]\s+.*(?:\n|$))+)/g, (match) => {
-    const items = match
-      .trim()
-      .split("\n")
-      .map((line) => line.replace(/^[-*+]\s+/, "").trim())
-      .map((item) => `<li>${item}</li>`)
-      .join("");
-    return `<ul>${items}</ul>`;
-  });
-
-  // 5️⃣ 链接
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  html = html.replace(
-    urlRegex,
-    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
-  );
-
-  // 6️⃣ 换行
-  html = html.replace(/\n/g, "<br />");
-
-  return html;
+  return md.render(text);
 }
 
 // 切换编辑/预览模式
@@ -402,7 +383,7 @@ const settingsIcon = createSvgElement(settings, {
 
 // 创建 GitHub 链接
 const githubLink = document.createElement("a");
-githubLink.href = "https://github.com/qzda";
+githubLink.href = "https://github.com/qzda/sticky-board";
 githubLink.target = "_blank";
 githubLink.appendChild(createSvgElement(github, { alt: "github" }));
 

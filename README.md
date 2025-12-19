@@ -1,67 +1,79 @@
 # [Sticky Board](https://sticky-web.netlify.app/)
 
-A clean and elegant web-based sticky notes board that supports creating, moving, resizing, and deleting notes via drag-and-drop.
+[English](./README.md) | [中文](./README-zh.md)
+
+A simple, elegant web-based sticky notes board for visual thinking, powered by drag & drop and Markdown.
+
+Everything is local. No accounts. No sync. Just notes.
 
 ## ✨ Features
 
-- 🎨 **Drag to Create** – Click and drag on empty space to create a sticky note, with real-time preview shadow
-- 📝 **Free Editing** – Each sticky note contains an editable text area
-- 🔄 **Drag to Move** – Drag the top area of a note to move it anywhere
-- 📏 **Resize** – Drag the right edge and bottom edge to resize the note
-- 🗑️ **Delete** – Click the “×” button in the top-right corner and confirm to delete
-- 💾 **Auto Save** – All operations are automatically saved
-- 📤 **Import / Export** – Export notes as a JSON file or import from an existing one
-- 🌓 **Dark Mode** – Automatically adapts to system theme (SVG icons adapt as well)
-- 📐 **Grid Alignment** – All operations snap to a grid
-- 🌍 **Multi-language Support** – Automatically switches between Chinese and English based on browser language
-- 🔒 **Data Privacy** – All data is stored locally in the browser only
+- 🔒 **Local & Private** – All data is stored locally in your browser
+- 📄 **Markdown Support** – Write notes using simple Markdown syntax
+- 🎨 **Drag to Create** – Click and drag on empty space to create a note
+- 🔄 **Drag to Move** – Move notes freely by dragging the top area
+- 📏 **Resize** – Resize notes by dragging edges or corners
+- 📐 **Grid Alignment** – Notes automatically snap to a grid
+- 🗑️ **Delete** – Delete notes with confirmation
+- 💾 **Auto Save** – All changes are saved automatically
+- 📤 **Import / Export** – Import or export notes as a JSON file
+- 🌓 **Dark Mode** – Follows system theme automatically
+- 🌍 **Multi-language** – Auto switches between Chinese and English
 
 ## 📖 Usage
 
-### Create a Sticky Note
+### Create a Note
 
-1. Press and hold the left mouse button on an empty area
-2. Drag to the desired size (a dashed preview box will appear)
-3. Release the mouse to create the note
-   - Note: Both width and height must be at least 10rem (160px)
-   - If the dragged area is too small, creation will be canceled automatically
+1. Click and hold on empty space
+2. Drag to set the size
+3. Release to create
+   - Minimum size: 10rem × 10rem (160px)
 
-### Edit a Sticky Note
+### Edit a Note
 
-- Click inside the text area of a note to edit
-- Content is saved automatically
+- Click the “+” button to edit
+- Write content using Markdown
+- Click “✓” to finish editing
 
-### Move a Sticky Note
+### Move & Resize
 
-- Click the gray top area of the note (not the text area)
-- Drag it to the target position
-- The note will automatically snap to the grid
+- Drag the top area to move
+- Drag edges or the bottom-right corner to resize
+- Notes snap to the grid automatically
 
-### Resize a Sticky Note
+### Delete a Note
 
-- Drag the right edge or bottom edge of the note
-- Drag the bottom-right corner to resize both width and height simultaneously
+- Click the “×” button
+- Confirm to delete
 
-### Delete a Sticky Note
+### Import / Export
 
-- Click the “×” button in the top-right corner of the note
-- Click “Confirm” in the confirmation dialog
+- Open **Settings** in the bottom-right corner
+- **Export** notes as `stickys-[timestamp].json`
+- **Import** notes from an existing JSON file
+  - Same ID → update
+  - New ID → add
+  - Missing ID → keep existing notes
 
-### Import / Export Sticky Notes
+## 🤝 Contributing
 
-- Click the **Settings** button in the bottom-right corner to expand options
-- **Export**: Click the download button to save all notes as a JSON file
-  (filename: `stickys-[timestamp].json`)
-- **Import**: Click the upload button to import notes from a JSON file
-  - Notes with the same ID will be updated
-  - Notes with new IDs will be added
-  - Existing notes not present in the imported file will be kept
+Issues and Pull Requests are welcome.
 
-## 🚀 Dev
+## 🔮 Roadmap
 
-### Install Dependencies
+- [ ] Custom note colors
+- [ ] Tags / grouping
+- [x] Import / export notes
+- [x] Multi-language support
+- [ ] Keyboard shortcuts
+- [ ] Multi-select & batch actions
+- [ ] Undo / redo
+- [ ] Cloud sync
 
-```bash
-npm install
-npm run dev
-```
+## 📝 License
+
+MIT License – see the [LICENSE](/LICENSE) file for details
+
+---
+
+<center>Made with ❤️ by qzda</center>

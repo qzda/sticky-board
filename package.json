@@ -10,9 +10,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "interactjs": "^1.10.27"
+    "interactjs": "^1.10.27",
+    "markdown-it": "^14.1.0"
   },
   "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
     "typescript": "~5.9.3",
     "vite": "^7.2.7"
   }
