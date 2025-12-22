@@ -59,6 +59,7 @@ function deleteCard(id: string) {
 }
 
 const md = new MarkdownIt({
+  html: true,
   linkify: true, // 自动识别 URL
   breaks: true, // 换行转 <br>
 });
