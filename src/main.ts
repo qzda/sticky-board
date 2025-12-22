@@ -169,6 +169,10 @@ function createCard(x: number, y: number): HTMLDivElement {
   card.appendChild(textarea);
   card.appendChild(preview);
 
+  setTimeout(() => {
+    textarea.focus();
+  });
+
   // 保存初始状态
   save(id, { x, y, width: 20, height: 10, text: textarea.value, zIndex });
 
