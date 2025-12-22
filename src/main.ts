@@ -43,7 +43,7 @@ type Stickys = Record<
   }
 >;
 
-const defaultText = "[Hi naonao :)](https://github.com/qzda/sticky-board)";
+const defaultText = "## Hi naonao";
 
 function save(id: string, data: Record<string, string | number>) {
   stickys[id] = {
@@ -99,13 +99,13 @@ function toggleEditMode(card: HTMLElement, isEditing: boolean) {
     // 切换到编辑模式
     textarea.style.display = "block";
     preview.style.display = "none";
-    editBtn.textContent = "✓";
+    editBtn.textContent = "👁️";
     textarea.focus();
   } else {
     // 切换到预览模式
     textarea.style.display = "none";
     preview.style.display = "block";
-    editBtn.textContent = "+";
+    editBtn.textContent = "✍";
     preview.innerHTML = textToHtml(textarea.value);
   }
 }
@@ -126,12 +126,12 @@ function createCard(x: number, y: number): HTMLDivElement {
 
   // 创建编辑按钮
   const editBtn = document.createElement("button");
-  editBtn.textContent = "+";
+  editBtn.textContent = "👁️";
   editBtn.className = "edit-btn";
 
   // 创建删除按钮
   const deleteBtn = document.createElement("button");
-  deleteBtn.textContent = "×";
+  deleteBtn.textContent = "❌";
   deleteBtn.className = "delete-btn";
 
   deleteBtn.addEventListener("click", (e) => {
@@ -146,7 +146,6 @@ function createCard(x: number, y: number): HTMLDivElement {
   const textarea = document.createElement("textarea");
   textarea.id = id;
   textarea.value = defaultText;
-  textarea.style.display = "none"; // 默认隐藏
   textarea.addEventListener("input", (e) => {
     const target = e.target as HTMLTextAreaElement;
     save(id, { text: target.value });
@@ -155,12 +154,13 @@ function createCard(x: number, y: number): HTMLDivElement {
   // 创建预览区域（预览模式）
   const preview = document.createElement("div");
   preview.className = "preview";
+  preview.style.display = "none"; // 默认隐藏
   preview.innerHTML = textToHtml(defaultText);
 
   // 编辑按钮点击事件
   editBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    const isCurrentlyEditing = textarea.style.display === "block";
+    const isCurrentlyEditing = textarea.style.display !== "none";
     toggleEditMode(card, !isCurrentlyEditing);
   });
 
@@ -297,12 +297,12 @@ Object.entries(stickys).forEach(([id, data]) => {
 
   // 创建编辑按钮
   const editBtn = document.createElement("button");
-  editBtn.textContent = "+";
+  editBtn.textContent = "✍";
   editBtn.className = "edit-btn";
 
   // 创建删除按钮
   const deleteBtn = document.createElement("button");
-  deleteBtn.textContent = "×";
+  deleteBtn.textContent = "❌";
   deleteBtn.className = "delete-btn";
 
   deleteBtn.addEventListener("click", (e) => {
@@ -318,6 +318,7 @@ Object.entries(stickys).forEach(([id, data]) => {
   textarea.id = id;
   textarea.value = data.text || defaultText;
   textarea.style.display = "none"; // 默认隐藏
+  textarea.setAttribute("autofocus", "true");
   textarea.addEventListener("input", (e) => {
     const target = e.target as HTMLTextAreaElement;
     save(id, { text: target.value });
@@ -331,7 +332,7 @@ Object.entries(stickys).forEach(([id, data]) => {
   // 编辑按钮点击事件
   editBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    const isCurrentlyEditing = textarea.style.display === "block";
+    const isCurrentlyEditing = textarea.style.display !== "none";
     toggleEditMode(card, !isCurrentlyEditing);
   });
 
