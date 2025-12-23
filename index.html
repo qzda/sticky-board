@@ -6,9 +6,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sticky Board</title>
   <meta name="description"
-    content="A clean and elegant web-based sticky notes board. Create, edit, move, and resize notes with drag and drop. Auto-save, dark mode, import/export. All data stored locally for privacy." />
+    content="A clean and elegant web-based sticky notes board that supports drag-and-drop operations, grid snapping, and Markdown syntax. All data is stored locally only. No account required, no synchronization needed — just open and use. 一个简洁优雅的网页便签板，用于可视化思考，支持拖拽操作和 Markdown 语法。所有数据仅保存在本地，无需账号，无需同步，打开即用。" />
   <meta name="keywords"
-    content="sticky notes, online notes, note board, drag and drop, sticky board, free notes app, web notes, note taking, dark mode notes" />
+    content="sticky notes, online notes, note board, drag and drop, sticky board, free notes app, web notes, note taking, dark mode notes, 便签板, 便签, 拖拽" />
   <meta name="author" content="qzda" />
   <meta name="robots" content="index, follow" />
   <link rel="canonical" href="https://sticky-web.netlify.app/" />
@@ -121,7 +121,6 @@
       border: none;
       outline: none;
       resize: none;
-      overflow: hidden;
       background-color: transparent;
 
       cursor: text !important;
@@ -159,25 +158,21 @@
 
       position: absolute;
       top: -1rem;
-      right: 0.25rem;
+      right: 0;
       width: 1rem;
       height: 1rem;
       border: none;
       background: transparent;
       color: var(--foreground);
-      font-size: 0.8rem;
+      font-size: 1.5rem;
       cursor: pointer;
       padding: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      opacity: 0.8;
+      opacity: 0.75;
 
       z-index: 10;
-    }
-
-    .card .edit-btn {
-      right: 1.5rem;
     }
 
     .card button:hover {
@@ -207,7 +202,7 @@
     }
 
     #settings svg,
-    a {
+    #settings a {
       color: inherit;
     }
 

@@ -19,6 +19,8 @@ const texts = {
     importConfirm: (importCount: number, existingIds: number, newIds: number) =>
       `发现 ${importCount} 个便签：\n- ${existingIds} 个现有便签将被更新\n- ${newIds} 个新便签将被添加\n\n继续？`,
     parseFailed: "解析 JSON 文件失败",
+    defaultText:
+      "### Hi naonao\n- 点击卡片空白处进入编辑模式\n- 点击页面空白处预览\n- 按住顶部移动位置\n- 按住右下角移动调整大小",
   },
   en: {
     deleteConfirm: "Are you sure you want to delete this note?",
@@ -26,6 +28,8 @@ const texts = {
     importConfirm: (importCount: number, existingIds: number, newIds: number) =>
       `Found ${importCount} note(s):\n- ${existingIds} existing note(s) will be updated\n- ${newIds} new note(s) will be added\n\nContinue?`,
     parseFailed: "Failed to parse JSON file",
+    defaultText:
+      "### Hi naonao\n- Click on the empty area of a card to enter edit mode\n- Click on any empty area of the page to preview\n- Drag the top area to move the card\n- Drag the bottom-right corner to resize",
   },
 };
 
@@ -43,7 +47,7 @@ type Stickys = Record<
   }
 >;
 
-const defaultText = "## Hi naonao";
+const defaultText = t.defaultText;
 
 function save(id: string, data: Record<string, string | number>) {
   stickys[id] = {
@@ -94,21 +98,33 @@ function textToHtml(text: string): string {
 function toggleEditMode(card: HTMLElement, isEditing: boolean) {
   const textarea = card.querySelector("textarea") as HTMLTextAreaElement;
   const preview = card.querySelector(".preview") as HTMLDivElement;
-  const editBtn = card.querySelector(".edit-btn") as HTMLButtonElement;
 
   if (isEditing) {
     // 切换到编辑模式
     textarea.style.display = "block";
     preview.style.display = "none";
-    editBtn.textContent = "👁️";
     textarea.focus();
   } else {
     // 切换到预览模式
     textarea.style.display = "none";
     preview.style.display = "block";
-    editBtn.textContent = "✍";
     preview.innerHTML = textToHtml(textarea.value);
   }
+}
+
+// 切换所有卡片到预览模式
+function toggleAllToPreview() {
+  const cards = document.querySelectorAll<HTMLDivElement>(".card");
+  cards.forEach((card) => {
+    const textarea = card.querySelector("textarea") as HTMLTextAreaElement;
+    const preview = card.querySelector(".preview") as HTMLDivElement;
+
+    if (textarea.style.display !== "none") {
+      textarea.style.display = "none";
+      preview.style.display = "block";
+      preview.innerHTML = textToHtml(textarea.value);
+    }
+  });
 }
 
 function createCard(x: number, y: number): HTMLDivElement {
@@ -125,14 +141,9 @@ function createCard(x: number, y: number): HTMLDivElement {
   card.style.position = "absolute";
   card.style.zIndex = `${zIndex}`;
 
-  // 创建编辑按钮
-  const editBtn = document.createElement("button");
-  editBtn.textContent = "👁️";
-  editBtn.className = "edit-btn";
-
   // 创建删除按钮
   const deleteBtn = document.createElement("button");
-  deleteBtn.textContent = "❌";
+  deleteBtn.textContent = "×";
   deleteBtn.className = "delete-btn";
 
   deleteBtn.addEventListener("click", (e) => {
@@ -158,21 +169,29 @@ function createCard(x: number, y: number): HTMLDivElement {
   preview.style.display = "none"; // 默认隐藏
   preview.innerHTML = textToHtml(defaultText);
 
-  // 编辑按钮点击事件
-  editBtn.addEventListener("click", (e) => {
+  // 预览区域点击事件 - 切换到编辑模式
+  preview.addEventListener("click", (e) => {
+    // 如果点击的是链接，不切换模式
+    if ((e.target as HTMLElement).tagName === "A") {
+      return;
+    }
+
+    // 如果有选中文本，不切换模式
+    const selection = window.getSelection();
+    if (selection && selection.toString().length > 0) {
+      return;
+    }
     e.stopPropagation();
-    const isCurrentlyEditing = textarea.style.display !== "none";
-    toggleEditMode(card, !isCurrentlyEditing);
+    toggleEditMode(card, true);
   });
 
-  card.appendChild(editBtn);
   card.appendChild(deleteBtn);
   card.appendChild(textarea);
   card.appendChild(preview);
 
   setTimeout(() => {
     textarea.focus();
-  });
+  }, 100);
 
   // 保存初始状态
   save(id, { x, y, width: 20, height: 10, text: textarea.value, zIndex });
@@ -255,7 +274,9 @@ grid.addEventListener("mouseup", () => {
         const card = createCard(left, top);
         card.style.width = `${widthRem}rem`;
         card.style.height = `${heightRem}rem`;
-        grid.appendChild(card);
+        setTimeout(() => {
+          grid.appendChild(card);
+        });
 
         // 保存卡片数据
         save(card.id, {
@@ -275,6 +296,15 @@ grid.addEventListener("mouseup", () => {
     }
 
     isDraggingToCreate = false;
+  }
+});
+
+// 点击 body 空白处，切换所有卡片到预览模式
+document.body.addEventListener("click", (e) => {
+  const target = e.target as HTMLElement;
+  // 如果点击的是 grid 或 body，切换所有卡片到预览模式
+  if (target === grid || target === document.body) {
+    toggleAllToPreview();
   }
 });
 
@@ -300,14 +330,9 @@ Object.entries(stickys).forEach(([id, data]) => {
   card.style.height = `${data.height}rem`;
   card.style.zIndex = `${zIndex}`;
 
-  // 创建编辑按钮
-  const editBtn = document.createElement("button");
-  editBtn.textContent = "✍";
-  editBtn.className = "edit-btn";
-
   // 创建删除按钮
   const deleteBtn = document.createElement("button");
-  deleteBtn.textContent = "❌";
+  deleteBtn.textContent = "×";
   deleteBtn.className = "delete-btn";
 
   deleteBtn.addEventListener("click", (e) => {
@@ -323,7 +348,6 @@ Object.entries(stickys).forEach(([id, data]) => {
   textarea.id = id;
   textarea.value = data.text || defaultText;
   textarea.style.display = "none"; // 默认隐藏
-  textarea.setAttribute("autofocus", "true");
   textarea.addEventListener("input", (e) => {
     const target = e.target as HTMLTextAreaElement;
     save(id, { text: target.value });
@@ -334,14 +358,23 @@ Object.entries(stickys).forEach(([id, data]) => {
   preview.className = "preview";
   preview.innerHTML = textToHtml(data.text || defaultText);
 
-  // 编辑按钮点击事件
-  editBtn.addEventListener("click", (e) => {
+  // 预览区域点击事件 - 切换到编辑模式
+  preview.addEventListener("click", (e) => {
+    // 如果点击的是链接，不切换模式
+    if ((e.target as HTMLElement).tagName === "A") {
+      return;
+    }
+
+    // 如果有选中文本，不切换模式
+    const selection = window.getSelection();
+    if (selection && selection.toString().length > 0) {
+      return;
+    }
+
     e.stopPropagation();
-    const isCurrentlyEditing = textarea.style.display !== "none";
-    toggleEditMode(card, !isCurrentlyEditing);
+    toggleEditMode(card, true);
   });
 
-  card.appendChild(editBtn);
   card.appendChild(deleteBtn);
   card.appendChild(textarea);
   card.appendChild(preview);
