@@ -56,12 +56,16 @@
       color-scheme: light dark;
       --background: #ffffff;
       --foreground: #171717;
+
+      --bg-card: #ffffaa;
     }
 
     @media (prefers-color-scheme: dark) {
       :root {
         --background: #171717;
         --foreground: #ffffff;
+
+        --bg-card: #7a7a0a;
       }
     }
 
@@ -93,127 +97,9 @@
       background-size: 1rem 1rem;
       background-position: 0.5rem 0.5rem;
     }
-
-    .card {
-      width: 20rem;
-      height: 10rem;
-      min-width: 10rem;
-      min-height: 10rem;
-      max-width: 50rem;
-      max-height: 50rem;
-      padding: 0.125rem;
-      border: 0.125rem solid gray;
-      border-top: 1rem solid gray;
-      background-color: var(--background);
-
-      z-index: 1;
-    }
-
-    .card.move {
-      box-shadow: 1rem 1rem rgba(128, 128, 128, 0.5);
-
-      user-select: none;
-    }
-
-    .card textarea {
-      width: 100%;
-      height: 100%;
-      border: none;
-      outline: none;
-      resize: none;
-      background-color: transparent;
-
-      cursor: text !important;
-    }
-
-    .card .preview {
-      width: 100%;
-      height: 100%;
-      padding: 0.5rem;
-      overflow: auto;
-      word-wrap: break-word;
-
-      font-size: 0.85rem;
-    }
-
-    .card .preview p {
-      line-height: 1rem;
-    }
-
-    .card .preview a {
-      color: #0066cc;
-      text-decoration: underline;
-    }
-
-    .card .preview a:hover {
-      color: #0052a3;
-    }
-
-    .card .preview ul {
-      padding-left: 1.5rem;
-    }
-
-    .card .preview img {
-      max-width: 100%;
-    }
-
-    .card button {
-      user-select: none;
-
-      position: absolute;
-      top: -1rem;
-      right: 0;
-      width: 1rem;
-      height: 1rem;
-      border: none;
-      background: transparent;
-      color: var(--foreground);
-      font-size: 1.5rem;
-      cursor: pointer;
-      padding: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      opacity: 0.75;
-
-      z-index: 10;
-    }
-
-    .card button:hover {
-      opacity: 1;
-    }
-
-    #settings {
-      position: absolute;
-      right: 1rem;
-      bottom: 1rem;
-
-      cursor: pointer;
-
-      width: 1.5rem;
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-
-      user-select: none;
-    }
-
-
-    #settings>* {
-      opacity: 0.6;
-
-      width: inherit;
-    }
-
-    #settings svg,
-    #settings a {
-      color: inherit;
-    }
-
-    #settings>*:hover {
-      opacity: 1;
-    }
   </style>
+
+  <link rel="stylesheet" href="/src/style.css">
 </head>
 
 <body>

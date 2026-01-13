@@ -6,7 +6,6 @@ import download from "./assets/download.svg?raw";
 import upload from "./assets/upload.svg?raw";
 import github from "./assets/github.svg?raw";
 
-// 在文件顶部添加语言检测函数
 function getLanguage(): "zh" | "en" {
   const lang = navigator.language.toLowerCase();
   return lang.startsWith("zh") ? "zh" : "en";
@@ -158,10 +157,12 @@ function createCard(
   card.style.transform = `translate(${x}px, ${y}px)`;
   card.style.zIndex = `${zIndex}`;
 
+  const resizeBtn = document.createElement("div");
+  resizeBtn.className = "resize";
+
   // 创建删除按钮
   const deleteBtn = document.createElement("button");
   deleteBtn.textContent = "×";
-  deleteBtn.className = "delete-btn";
   deleteBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     if (confirm(t.deleteConfirm)) {
@@ -200,6 +201,7 @@ function createCard(
   });
 
   card.appendChild(deleteBtn);
+  card.appendChild(resizeBtn);
   card.appendChild(textarea);
   card.appendChild(preview);
 
@@ -466,7 +468,7 @@ uploadIcon.addEventListener("click", () => {
 // 配置 interact.js
 interact(".card")
   .resizable({
-    edges: { left: false, right: true, bottom: true },
+    edges: { right: ".resize", bottom: ".resize" },
     modifiers: [
       interact.modifiers.restrictEdges({
         outer: "parent",
@@ -524,7 +526,7 @@ interact(".card")
       }),
       interact.modifiers.restrict({
         restriction: grid,
-        elementRect: { top: 0, left: 0, bottom: 1, right: 1 },
+        elementRect: { top: 0, left: 0, bottom: 0, right: 0 },
         endOnly: true,
       }),
     ],
