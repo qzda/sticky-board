@@ -35,21 +35,21 @@ const texts = {
 
 const t = texts[getLanguage()];
 
-type Stickys = Record<
-  string,
-  {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    text: string;
-    zIndex: number;
-  }
->;
+type Stickys = Record<string, Sticky>;
+
+type Sticky = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  zIndex: number;
+
+  text: string;
+};
 
 const defaultText = t.defaultText;
 
-function save(id: string, data: Record<string, string | number>) {
+function save(id: string, data: Partial<Sticky>) {
   stickys[id] = {
     ...stickys[id],
     ...data,
@@ -96,20 +96,25 @@ function textToHtml(text: string): string {
 
 // 切换编辑/预览模式
 function toggleEditMode(card: HTMLElement, isEditing: boolean) {
-  const textarea = card.querySelector("textarea") as HTMLTextAreaElement;
-  const preview = card.querySelector(".preview") as HTMLDivElement;
+  setTimeout(() => {
+    const textarea = card.querySelector("textarea") as HTMLTextAreaElement;
+    const preview = card.querySelector(".preview") as HTMLDivElement;
 
-  if (isEditing) {
-    // 切换到编辑模式
-    textarea.style.display = "block";
-    preview.style.display = "none";
-    textarea.focus();
-  } else {
-    // 切换到预览模式
-    textarea.style.display = "none";
-    preview.style.display = "block";
-    preview.innerHTML = textToHtml(textarea.value);
-  }
+    if (isEditing) {
+      // 切换到编辑模式
+      textarea.style.display = "block";
+      preview.style.display = "none";
+
+      setTimeout(() => {
+        textarea.focus();
+      }, 200);
+    } else {
+      // 切换到预览模式
+      textarea.style.display = "none";
+      preview.style.display = "block";
+      preview.innerHTML = textToHtml(textarea.value);
+    }
+  });
 }
 
 // 切换所有卡片到预览模式
@@ -127,25 +132,36 @@ function toggleAllToPreview() {
   });
 }
 
-function createCard(x: number, y: number): HTMLDivElement {
-  const id = `${Date.now()}`;
-  const zIndex = getMaxZIndex() + 1;
+function createCard(
+  id: string,
+  data: Partial<Sticky>,
+  isEditing: boolean
+): HTMLDivElement {
+  const {
+    zIndex = getMaxZIndex(),
+    width = 20,
+    height = 10,
+    x = 0,
+    y = 0,
+    text = defaultText,
+  } = data;
 
   const card = document.createElement("div");
   card.className = "card";
   card.id = id;
   card.setAttribute("data-xy", `${x},${y}`);
-  card.setAttribute("data-size", "20,10");
+  card.setAttribute("data-size", `${width},${height}`);
   card.setAttribute("data-zindex", `${zIndex}`);
-  card.style.transform = `translate(${x}px, ${y}px)`;
   card.style.position = "absolute";
+  card.style.width = `${width}rem`;
+  card.style.height = `${height}rem`;
+  card.style.transform = `translate(${x}px, ${y}px)`;
   card.style.zIndex = `${zIndex}`;
 
   // 创建删除按钮
   const deleteBtn = document.createElement("button");
   deleteBtn.textContent = "×";
   deleteBtn.className = "delete-btn";
-
   deleteBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     if (confirm(t.deleteConfirm)) {
@@ -154,22 +170,19 @@ function createCard(x: number, y: number): HTMLDivElement {
     }
   });
 
-  // 创建 textarea（编辑模式）
+  // 创建 textarea
   const textarea = document.createElement("textarea");
   textarea.id = id;
-  textarea.value = defaultText;
+  textarea.value = text;
   textarea.addEventListener("input", (e) => {
     const target = e.target as HTMLTextAreaElement;
     save(id, { text: target.value });
   });
 
-  // 创建预览区域（预览模式）
+  // 创建预览区域
   const preview = document.createElement("div");
   preview.className = "preview";
-  preview.style.display = "none"; // 默认隐藏
-  preview.innerHTML = textToHtml(defaultText);
-
-  // 预览区域点击事件 - 切换到编辑模式
+  preview.innerHTML = textToHtml(textarea.value);
   preview.addEventListener("click", (e) => {
     // 如果点击的是链接，不切换模式
     if ((e.target as HTMLElement).tagName === "A") {
@@ -181,6 +194,7 @@ function createCard(x: number, y: number): HTMLDivElement {
     if (selection && selection.toString().length > 0) {
       return;
     }
+
     e.stopPropagation();
     toggleEditMode(card, true);
   });
@@ -189,12 +203,17 @@ function createCard(x: number, y: number): HTMLDivElement {
   card.appendChild(textarea);
   card.appendChild(preview);
 
-  setTimeout(() => {
-    textarea.focus();
-  }, 100);
+  toggleEditMode(card, isEditing);
 
   // 保存初始状态
-  save(id, { x, y, width: 20, height: 10, text: textarea.value, zIndex });
+  save(id, {
+    zIndex,
+    width,
+    height,
+    x,
+    y,
+    text,
+  });
 
   return card;
 }
@@ -267,24 +286,22 @@ grid.addEventListener("mouseup", () => {
         // 获取阴影的位置和大小
         const left = parseInt(shadowDiv.style.left);
         const top = parseInt(shadowDiv.style.top);
-        const widthRem = width / 16; // 转换为rem
-        const heightRem = height / 16;
+        const widthRem = (width / 16) >> 0; // 转换为rem
+        const heightRem = (height / 16) >> 0;
 
         // 创建实际的卡片
-        const card = createCard(left, top);
-        card.style.width = `${widthRem}rem`;
-        card.style.height = `${heightRem}rem`;
-        setTimeout(() => {
-          grid.appendChild(card);
-        });
+        const card = createCard(
+          `${Date.now()}`,
+          {
+            x: left,
+            y: top,
+            width: widthRem,
+            height: heightRem,
+          },
+          true
+        );
 
-        // 保存卡片数据
-        save(card.id, {
-          x: left,
-          y: top,
-          width: widthRem,
-          height: heightRem,
-        });
+        grid.appendChild(card);
       }
       // 如果过小，直接取消，不创建卡片
     }
@@ -316,68 +333,8 @@ function getMaxZIndex(): number {
 // 加载已保存的便签
 let stickys: Stickys = JSON.parse(localStorage.getItem("stickys") || "{}");
 Object.entries(stickys).forEach(([id, data]) => {
-  const zIndex = data.zIndex || 1;
+  const card = createCard(id, data, false);
 
-  const card = document.createElement("div");
-  card.className = "card";
-  card.id = id;
-  card.setAttribute("data-xy", `${data.x},${data.y}`);
-  card.setAttribute("data-size", `${data.width},${data.height}`);
-  card.setAttribute("data-zindex", `${zIndex}`);
-  card.style.transform = `translate(${data.x}px, ${data.y}px)`;
-  card.style.position = "absolute";
-  card.style.width = `${data.width}rem`;
-  card.style.height = `${data.height}rem`;
-  card.style.zIndex = `${zIndex}`;
-
-  // 创建删除按钮
-  const deleteBtn = document.createElement("button");
-  deleteBtn.textContent = "×";
-  deleteBtn.className = "delete-btn";
-
-  deleteBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (confirm(t.deleteConfirm)) {
-      deleteCard(id);
-      card.remove();
-    }
-  });
-
-  // 创建 textarea（编辑模式）
-  const textarea = document.createElement("textarea");
-  textarea.id = id;
-  textarea.value = data.text || defaultText;
-  textarea.style.display = "none"; // 默认隐藏
-  textarea.addEventListener("input", (e) => {
-    const target = e.target as HTMLTextAreaElement;
-    save(id, { text: target.value });
-  });
-
-  // 创建预览区域（预览模式）
-  const preview = document.createElement("div");
-  preview.className = "preview";
-  preview.innerHTML = textToHtml(data.text || defaultText);
-
-  // 预览区域点击事件 - 切换到编辑模式
-  preview.addEventListener("click", (e) => {
-    // 如果点击的是链接，不切换模式
-    if ((e.target as HTMLElement).tagName === "A") {
-      return;
-    }
-
-    // 如果有选中文本，不切换模式
-    const selection = window.getSelection();
-    if (selection && selection.toString().length > 0) {
-      return;
-    }
-
-    e.stopPropagation();
-    toggleEditMode(card, true);
-  });
-
-  card.appendChild(deleteBtn);
-  card.appendChild(textarea);
-  card.appendChild(preview);
   grid.appendChild(card);
 });
 
