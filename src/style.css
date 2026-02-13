@@ -7,6 +7,7 @@
   max-height: 50rem;
   border-top: 1rem solid var(--bg-card);
   background-color: var(--bg-card);
+  box-shadow: 1rem 1rem rgba(128, 128, 128, 0.25);
 
   z-index: 1;
 }
