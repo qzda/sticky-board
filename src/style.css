@@ -125,3 +125,52 @@
 #settings > *:hover {
   opacity: 1;
 }
+
+/* 滚动条样式 - 与 claude.ai 一致 */
+.card textarea::-webkit-scrollbar,
+.card .preview::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.card textarea::-webkit-scrollbar-track,
+.card .preview::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.card textarea::-webkit-scrollbar-thumb,
+.card .preview::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.card textarea::-webkit-scrollbar-thumb:hover,
+.card .preview::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+  .card textarea::-webkit-scrollbar-thumb,
+  .card .preview::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  .card textarea::-webkit-scrollbar-thumb:hover,
+  .card .preview::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+}
+
+/* Firefox 滚动条样式 */
+.card textarea,
+.card .preview {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+@media (prefers-color-scheme: dark) {
+  .card textarea,
+  .card .preview {
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  }
+}
