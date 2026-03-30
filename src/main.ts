@@ -49,21 +49,31 @@ type Sticky = {
 };
 
 const defaultText = t.defaultText;
+const IMAGES_STORAGE_KEY = "stickyImages";
+const IMAGE_SRC_PREFIX = "sticky-image://";
+const IMAGE_KEY_PATTERN = /!\[[^\]]*]\(sticky-image:\/\/([a-zA-Z0-9_-]+)\)/g;
 
 function save(id: string, data: Partial<Sticky>) {
   stickys[id] = {
     ...stickys[id],
     ...data,
   };
+  if (data.text !== undefined) {
+    cleanupUnusedImages();
+  }
   localStorage.setItem("stickys", JSON.stringify(stickys));
 }
 
 function deleteCard(id: string) {
   delete stickys[id];
+  cleanupUnusedImages();
   localStorage.setItem("stickys", JSON.stringify(stickys));
 }
 
 const MAX_PASTED_IMAGE_SIZE = 4 * 1024 * 1024;
+let imageStore: Record<string, string> = JSON.parse(
+  localStorage.getItem(IMAGES_STORAGE_KEY) || "{}"
+);
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -72,6 +82,50 @@ function fileToDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
+}
+
+function saveImageStore() {
+  localStorage.setItem(IMAGES_STORAGE_KEY, JSON.stringify(imageStore));
+}
+
+function createImageKey() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function extractReferencedImageKeys(text: string): Set<string> {
+  const keys = new Set<string>();
+  IMAGE_KEY_PATTERN.lastIndex = 0;
+  let match = IMAGE_KEY_PATTERN.exec(text);
+  while (match) {
+    keys.add(match[1]);
+    match = IMAGE_KEY_PATTERN.exec(text);
+  }
+  return keys;
+}
+
+function getAllReferencedImageKeys(): Set<string> {
+  const allKeys = new Set<string>();
+  Object.values(stickys).forEach((sticky) => {
+    const keys = extractReferencedImageKeys(sticky.text || "");
+    keys.forEach((key) => allKeys.add(key));
+  });
+  return allKeys;
+}
+
+function cleanupUnusedImages() {
+  const referencedKeys = getAllReferencedImageKeys();
+  let changed = false;
+
+  Object.keys(imageStore).forEach((key) => {
+    if (!referencedKeys.has(key)) {
+      delete imageStore[key];
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    saveImageStore();
+  }
 }
 
 let imagePreviewOverlay: HTMLDivElement | null = null;
@@ -133,6 +187,25 @@ md.renderer.rules.link_open = (tokens, idx, options, _env, self) => {
     token.attrPush(["rel", "noopener noreferrer"]);
   } else {
     token.attrs![relIndex][1] = "noopener noreferrer";
+  }
+
+  return self.renderToken(tokens, idx, options);
+};
+
+md.renderer.rules.image = (tokens, idx, options, _env, self) => {
+  const token = tokens[idx];
+  const src = token.attrGet("src");
+
+  if (src?.startsWith(IMAGE_SRC_PREFIX)) {
+    const key = src.slice(IMAGE_SRC_PREFIX.length);
+    const imageData = imageStore[key];
+
+    if (imageData) {
+      token.attrSet("src", imageData);
+      token.attrSet("data-image-key", key);
+    } else {
+      token.attrSet("alt", "[missing image]");
+    }
   }
 
   return self.renderToken(tokens, idx, options);
@@ -250,7 +323,11 @@ function createCard(
 
     try {
       const dataUrl = await fileToDataUrl(file);
-      const markdownImage = `\n![pasted-image](${dataUrl})\n`;
+      const imageKey = createImageKey();
+      imageStore[imageKey] = dataUrl;
+      saveImageStore();
+
+      const markdownImage = `\n![pasted-image](${IMAGE_SRC_PREFIX}${imageKey})\n`;
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
 
@@ -430,6 +507,7 @@ function getMaxZIndex(): number {
 }
 // 加载已保存的便签
 let stickys: Stickys = JSON.parse(localStorage.getItem("stickys") || "{}");
+cleanupUnusedImages();
 Object.entries(stickys).forEach(([id, data]) => {
   const card = createCard(id, data, false);
 
@@ -546,6 +624,7 @@ uploadIcon.addEventListener("click", () => {
 
         if (confirm(message)) {
           stickys = mergedStickys;
+          cleanupUnusedImages();
           localStorage.setItem("stickys", JSON.stringify(stickys));
           // 刷新页面以加载新数据
           location.reload();
