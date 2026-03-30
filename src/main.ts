@@ -15,6 +15,7 @@ const texts = {
   zh: {
     deleteConfirm: "确定要删除这个便签吗？",
     invalidFormat: "无效的文件格式",
+    imageTooLarge: "图片超过 4MB，无法粘贴",
     importConfirm: (importCount: number, existingIds: number, newIds: number) =>
       `发现 ${importCount} 个便签：\n- ${existingIds} 个现有便签将被更新\n- ${newIds} 个新便签将被添加\n\n继续？`,
     parseFailed: "解析 JSON 文件失败",
@@ -24,6 +25,7 @@ const texts = {
   en: {
     deleteConfirm: "Are you sure you want to delete this note?",
     invalidFormat: "Invalid file format",
+    imageTooLarge: "Image is larger than 4MB and cannot be pasted",
     importConfirm: (importCount: number, existingIds: number, newIds: number) =>
       `Found ${importCount} note(s):\n- ${existingIds} existing note(s) will be updated\n- ${newIds} new note(s) will be added\n\nContinue?`,
     parseFailed: "Failed to parse JSON file",
@@ -59,6 +61,54 @@ function save(id: string, data: Partial<Sticky>) {
 function deleteCard(id: string) {
   delete stickys[id];
   localStorage.setItem("stickys", JSON.stringify(stickys));
+}
+
+const MAX_PASTED_IMAGE_SIZE = 4 * 1024 * 1024;
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+let imagePreviewOverlay: HTMLDivElement | null = null;
+let imagePreviewElement: HTMLImageElement | null = null;
+
+function ensureImagePreviewOverlay() {
+  if (imagePreviewOverlay && imagePreviewElement) return;
+
+  imagePreviewOverlay = document.createElement("div");
+  imagePreviewOverlay.className = "image-preview-overlay";
+
+  imagePreviewElement = document.createElement("img");
+  imagePreviewElement.className = "image-preview-image";
+
+  imagePreviewOverlay.appendChild(imagePreviewElement);
+  imagePreviewOverlay.addEventListener("click", (e) => {
+    if (e.target === imagePreviewOverlay) {
+      imagePreviewOverlay?.classList.remove("open");
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      imagePreviewOverlay?.classList.remove("open");
+    }
+  });
+
+  document.body.appendChild(imagePreviewOverlay);
+}
+
+function openImagePreview(src: string, alt = "") {
+  ensureImagePreviewOverlay();
+  if (!imagePreviewOverlay || !imagePreviewElement) return;
+
+  imagePreviewElement.src = src;
+  imagePreviewElement.alt = alt;
+  imagePreviewOverlay.classList.add("open");
 }
 
 const md = new MarkdownIt({
@@ -179,20 +229,66 @@ function createCard(
     const target = e.target as HTMLTextAreaElement;
     save(id, { text: target.value });
   });
+  textarea.addEventListener("paste", async (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    const imageItem = Array.from(items).find((item) =>
+      item.type.startsWith("image/")
+    );
+    if (!imageItem) return;
+
+    const file = imageItem.getAsFile();
+    if (!file) return;
+
+    e.preventDefault();
+
+    if (file.size > MAX_PASTED_IMAGE_SIZE) {
+      alert(t.imageTooLarge);
+      return;
+    }
+
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      const markdownImage = `\n![pasted-image](${dataUrl})\n`;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+
+      textarea.setRangeText(markdownImage, start, end, "end");
+      save(id, { text: textarea.value });
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    } catch (error) {
+      console.error(error);
+    }
+  });
 
   // 创建预览区域
   const preview = document.createElement("div");
   preview.className = "preview";
   preview.innerHTML = textToHtml(textarea.value);
   preview.addEventListener("click", (e) => {
+    const target = e.target as HTMLElement;
+
     // 如果点击的是链接，不切换模式
-    if ((e.target as HTMLElement).tagName === "A") {
+    if (target.tagName === "A") {
+      return;
+    }
+
+    if (target.tagName === "IMG") {
+      e.stopPropagation();
+      const image = target as HTMLImageElement;
+      openImagePreview(image.currentSrc || image.src, image.alt);
       return;
     }
 
     // 如果有选中文本，不切换模式
     const selection = window.getSelection();
     if (selection && selection.toString().length > 0) {
+      return;
+    }
+
+    // 只有点击预览空白处才进入编辑模式
+    if (target !== preview) {
       return;
     }
 
