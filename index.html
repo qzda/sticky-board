@@ -54,24 +54,23 @@
       -moz-osx-font-smoothing: grayscale;
 
       color-scheme: light dark;
-      --background: #ffffff;
-      --foreground: #171717;
-
+      --bg: #ffffff;
+      --color: #171717;
+      --color-card: #171717;
       --bg-card: #ffffaa;
     }
 
     @media (prefers-color-scheme: dark) {
       :root {
-        --background: #171717;
-        /* --foreground: #ffffff; */
-
+        --bg: #4e4e4e;
+        --color: #ffffff;
         --bg-card: #ebeb54;
       }
     }
 
     * {
       box-sizing: border-box;
-      color: var(--foreground);
+      color: var(--color);
     }
 
     body {
@@ -79,8 +78,8 @@
       height: 100dvh;
       margin: 0;
       overflow: hidden;
-      background: var(--background);
-      color: var(--foreground);
+      background: var(--bg);
+      color: var(--color);
     }
 
     body.move {

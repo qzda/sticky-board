@@ -11,6 +11,16 @@
 
   z-index: 1;
 }
+@media (prefers-color-scheme: dark) {
+  .card {
+    box-shadow: none;
+  }
+}
+
+.card * {
+  color: var(--color-card);
+}
+
 .card.move {
   box-shadow: 1rem 1rem rgba(128, 128, 128, 0.5);
   user-select: none;
