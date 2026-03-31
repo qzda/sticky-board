@@ -56,6 +56,7 @@ const IMAGES_STORAGE_KEY = "stickyImages";
 const IMAGE_SRC_PREFIX = "sticky-image://";
 const IMAGE_KEY_PATTERN = /!\[[^\]]*]\(sticky-image:\/\/([a-zA-Z0-9_-]+)\)/g;
 const SUNNY_THEME_STORAGE_KEY = "sunnyThemeEnabled";
+const CLEANUP_DEBOUNCE_MS = 800;
 
 function save(id: string, data: Partial<Sticky>) {
   stickys[id] = {
@@ -63,7 +64,7 @@ function save(id: string, data: Partial<Sticky>) {
     ...data,
   };
   if (data.text !== undefined) {
-    cleanupUnusedImages();
+    scheduleCleanupUnusedImages();
   }
   localStorage.setItem("stickys", JSON.stringify(stickys));
 }
@@ -78,6 +79,7 @@ const MAX_PASTED_IMAGE_SIZE = 4 * 1024 * 1024;
 let imageStore: Record<string, string> = JSON.parse(
   localStorage.getItem(IMAGES_STORAGE_KEY) || "{}"
 );
+let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -132,6 +134,17 @@ function cleanupUnusedImages() {
   }
 }
 
+function scheduleCleanupUnusedImages() {
+  if (cleanupTimer) {
+    clearTimeout(cleanupTimer);
+  }
+
+  cleanupTimer = setTimeout(() => {
+    cleanupUnusedImages();
+    cleanupTimer = null;
+  }, CLEANUP_DEBOUNCE_MS);
+}
+
 function getSunnyThemeEnabled() {
   const stored = localStorage.getItem(SUNNY_THEME_STORAGE_KEY);
   if (stored === null) return true;
@@ -139,15 +152,23 @@ function getSunnyThemeEnabled() {
 }
 
 function applySunnyTheme(enabled: boolean) {
-  ensureSunnyVideoOverlay();
   document.body.classList.toggle("sunny-theme", enabled);
-
-  if (!sunnyVideoElement) return;
   if (enabled) {
-    sunnyVideoElement.play().catch(() => {});
-  } else {
-    sunnyVideoElement.pause();
+    ensureSunnyVideoOverlay();
   }
+  syncSunnyVideoPlayback();
+}
+
+function syncSunnyVideoPlayback() {
+  if (!sunnyVideoElement) return;
+
+  const enabled = document.body.classList.contains("sunny-theme");
+  if (enabled && document.visibilityState === "visible") {
+    sunnyVideoElement.play().catch(() => {});
+    return;
+  }
+
+  sunnyVideoElement.pause();
 }
 
 let imagePreviewOverlay: HTMLDivElement | null = null;
@@ -168,11 +189,17 @@ function ensureSunnyVideoOverlay() {
   sunnyVideoElement.muted = true;
   sunnyVideoElement.loop = true;
   sunnyVideoElement.playsInline = true;
-  sunnyVideoElement.preload = "auto";
+  sunnyVideoElement.preload = "metadata";
 
   sunnyVideoOverlay.appendChild(sunnyVideoElement);
   document.body.appendChild(sunnyVideoOverlay);
+
+  syncSunnyVideoPlayback();
 }
+
+document.addEventListener("visibilitychange", () => {
+  syncSunnyVideoPlayback();
+});
 
 function ensureImagePreviewOverlay() {
   if (imagePreviewOverlay && imagePreviewElement) return;

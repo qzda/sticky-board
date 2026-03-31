@@ -88,6 +88,7 @@
   align-items: center;
   justify-content: center;
   opacity: 0.75;
+  transition: opacity 0.2s;
 
   z-index: 10;
 }
@@ -115,6 +116,7 @@
 
 #settings > * {
   opacity: 0.6;
+  transition: opacity 0.2s;
 }
 
 #settings svg,
@@ -156,6 +158,8 @@
   opacity: 0;
   transition: opacity 0.35s ease;
   mix-blend-mode: multiply;
+  contain: paint;
+  will-change: opacity;
 }
 
 body.sunny-theme .sunny-video-overlay {
@@ -167,8 +171,8 @@ body.sunny-theme .sunny-video-overlay {
   height: 100%;
   object-fit: cover;
   object-position: center top;
-  filter: blur(1.2px) contrast(1.14) brightness(0.78) saturate(0.72);
-  transform: scale(1.06);
+  filter: contrast(1.08) brightness(0.8);
+  transform: scale(1.02);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -182,7 +186,13 @@ body.sunny-theme .sunny-video-overlay {
   }
 
   .sunny-video {
-    filter: blur(1.3px) contrast(1.08) brightness(0.68) saturate(0.55);
+    filter: contrast(1.05) brightness(0.72);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sunny-video-overlay {
+    display: none;
   }
 }
 
