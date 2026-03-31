@@ -5,6 +5,7 @@ import settings from "./assets/settings.svg?raw";
 import download from "./assets/download.svg?raw";
 import upload from "./assets/upload.svg?raw";
 import github from "./assets/github.svg?raw";
+import leavesVideo from "./assets/leaves.mp4";
 
 function getLanguage(): "zh" | "en" {
   const lang = navigator.language.toLowerCase();
@@ -19,6 +20,7 @@ const texts = {
     importConfirm: (importCount: number, existingIds: number, newIds: number) =>
       `发现 ${importCount} 个便签：\n- ${existingIds} 个现有便签将被更新\n- ${newIds} 个新便签将被添加\n\n继续？`,
     parseFailed: "解析 JSON 文件失败",
+    sunnyTheme: "Sunny",
     defaultText:
       "### Hi naonao\n- 点击卡片空白处进入编辑模式\n- 点击页面空白处预览\n- 按住顶部移动位置\n- 按住右下角移动调整大小",
   },
@@ -29,6 +31,7 @@ const texts = {
     importConfirm: (importCount: number, existingIds: number, newIds: number) =>
       `Found ${importCount} note(s):\n- ${existingIds} existing note(s) will be updated\n- ${newIds} new note(s) will be added\n\nContinue?`,
     parseFailed: "Failed to parse JSON file",
+    sunnyTheme: "Sunny",
     defaultText:
       "### Hi naonao\n- Click on the empty area of a card to enter edit mode\n- Click on any empty area of the page to preview\n- Drag the top area to move the card\n- Drag the bottom-right corner to resize",
   },
@@ -52,6 +55,7 @@ const defaultText = t.defaultText;
 const IMAGES_STORAGE_KEY = "stickyImages";
 const IMAGE_SRC_PREFIX = "sticky-image://";
 const IMAGE_KEY_PATTERN = /!\[[^\]]*]\(sticky-image:\/\/([a-zA-Z0-9_-]+)\)/g;
+const SUNNY_THEME_STORAGE_KEY = "sunnyThemeEnabled";
 
 function save(id: string, data: Partial<Sticky>) {
   stickys[id] = {
@@ -128,8 +132,47 @@ function cleanupUnusedImages() {
   }
 }
 
+function getSunnyThemeEnabled() {
+  const stored = localStorage.getItem(SUNNY_THEME_STORAGE_KEY);
+  if (stored === null) return true;
+  return stored === "1";
+}
+
+function applySunnyTheme(enabled: boolean) {
+  ensureSunnyVideoOverlay();
+  document.body.classList.toggle("sunny-theme", enabled);
+
+  if (!sunnyVideoElement) return;
+  if (enabled) {
+    sunnyVideoElement.play().catch(() => {});
+  } else {
+    sunnyVideoElement.pause();
+  }
+}
+
 let imagePreviewOverlay: HTMLDivElement | null = null;
 let imagePreviewElement: HTMLImageElement | null = null;
+let sunnyVideoOverlay: HTMLDivElement | null = null;
+let sunnyVideoElement: HTMLVideoElement | null = null;
+
+function ensureSunnyVideoOverlay() {
+  if (sunnyVideoOverlay && sunnyVideoElement) return;
+
+  sunnyVideoOverlay = document.createElement("div");
+  sunnyVideoOverlay.className = "sunny-video-overlay";
+
+  sunnyVideoElement = document.createElement("video");
+  sunnyVideoElement.className = "sunny-video";
+  sunnyVideoElement.src = leavesVideo;
+  sunnyVideoElement.autoplay = true;
+  sunnyVideoElement.muted = true;
+  sunnyVideoElement.loop = true;
+  sunnyVideoElement.playsInline = true;
+  sunnyVideoElement.preload = "auto";
+
+  sunnyVideoOverlay.appendChild(sunnyVideoElement);
+  document.body.appendChild(sunnyVideoOverlay);
+}
 
 function ensureImagePreviewOverlay() {
   if (imagePreviewOverlay && imagePreviewElement) return;
@@ -553,6 +596,26 @@ const settingsIcon = createSvgElement(settings, {
   alt: "settings",
 });
 
+const sunnyToggle = document.createElement("label");
+sunnyToggle.className = "sunny-toggle";
+sunnyToggle.style.display = "none";
+sunnyToggle.title = t.sunnyTheme;
+
+const sunnyToggleInput = document.createElement("input");
+sunnyToggleInput.type = "checkbox";
+sunnyToggleInput.checked = getSunnyThemeEnabled();
+applySunnyTheme(sunnyToggleInput.checked);
+sunnyToggleInput.addEventListener("change", () => {
+  const enabled = sunnyToggleInput.checked;
+  applySunnyTheme(enabled);
+  localStorage.setItem(SUNNY_THEME_STORAGE_KEY, enabled ? "1" : "0");
+});
+
+const sunnyToggleText = document.createElement("span");
+sunnyToggleText.textContent = t.sunnyTheme;
+sunnyToggle.appendChild(sunnyToggleInput);
+sunnyToggle.appendChild(sunnyToggleText);
+
 // 创建 GitHub 链接
 const githubLink = document.createElement("a");
 githubLink.href = "https://github.com/qzda/sticky-board";
@@ -562,6 +625,7 @@ githubLink.appendChild(createSvgElement(github, { alt: "github" }));
 // 添加到容器
 settingsContainer.appendChild(downloadIcon);
 settingsContainer.appendChild(uploadIcon);
+settingsContainer.appendChild(sunnyToggle);
 settingsContainer.appendChild(settingsIcon);
 settingsContainer.appendChild(githubLink);
 
@@ -571,6 +635,7 @@ settingsIcon.addEventListener("click", () => {
   isExpanded = !isExpanded;
   downloadIcon.style.display = isExpanded ? "block" : "none";
   uploadIcon.style.display = isExpanded ? "block" : "none";
+  sunnyToggle.style.display = isExpanded ? "inline-flex" : "none";
 });
 
 // 导出功能
