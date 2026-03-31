@@ -1,4 +1,6 @@
 .card {
+  --card-corner-size: 1rem;
+
   width: 20rem;
   height: 10rem;
   min-width: 10rem;
@@ -8,12 +10,38 @@
   border-top: 1rem solid var(--bg-card);
   background-color: var(--bg-card);
   box-shadow: 1rem 1rem rgba(128, 128, 128, 0.25);
+  position: relative;
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% calc(100% - var(--card-corner-size)),
+    calc(100% - var(--card-corner-size)) 100%,
+    0 100%
+  );
 
   z-index: 1;
 }
+
+.card::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: var(--card-corner-size);
+  height: var(--card-corner-size);
+  clip-path: polygon(0 100%, 0 0, 100% 0);
+  background: rgba(156, 156, 39, 0.2);
+  pointer-events: none;
+  z-index: 2;
+}
+
 @media (prefers-color-scheme: dark) {
   .card {
     box-shadow: none;
+  }
+
+  .card::before {
+    background: yellow;
   }
 }
 
@@ -26,10 +54,14 @@
   user-select: none;
 }
 
-.card textarea {
+.card textarea,
+.card .preview {
   width: 100%;
   height: 100%;
   padding: 0.5rem;
+}
+
+.card textarea {
   border: none;
   outline: none;
   resize: none;
@@ -39,9 +71,6 @@
 }
 
 .card .preview {
-  width: 100%;
-  height: 100%;
-  padding: 0.5rem;
   overflow: auto;
   word-wrap: break-word;
 
@@ -77,8 +106,8 @@
   height: 1rem;
 
   position: absolute;
-  bottom: -0.5rem;
-  right: -0.5rem;
+  bottom: 0;
+  right: 0;
 }
 
 .card button {
@@ -139,13 +168,17 @@
   opacity: 1;
 }
 
-.sunny-toggle {
+.sunny-toggle,
+.settings-action {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
   font-size: 1rem;
   padding: 0.35rem 0.55rem;
   border-radius: 999px;
+}
+
+.sunny-toggle {
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(0, 0, 0, 0.2);
   backdrop-filter: blur(2px);
@@ -161,12 +194,6 @@
 }
 
 .settings-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  font-size: 1rem;
-  padding: 0.35rem 0.55rem;
-  border-radius: 999px;
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(0, 0, 0, 0.2);
   backdrop-filter: blur(2px);
