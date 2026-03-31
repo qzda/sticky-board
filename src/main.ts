@@ -16,24 +16,24 @@ const texts = {
   zh: {
     deleteConfirm: "确定要删除这个便签吗？",
     invalidFormat: "无效的文件格式",
-    imageTooLarge: "图片超过 4MB，无法粘贴",
+    imageTooLarge: "图片超过 500KB，无法粘贴",
     importConfirm: (importCount: number, existingIds: number, newIds: number) =>
       `发现 ${importCount} 个便签：\n- ${existingIds} 个现有便签将被更新\n- ${newIds} 个新便签将被添加\n\n继续？`,
     parseFailed: "解析 JSON 文件失败",
     sunnyTheme: "Sunny",
     defaultText:
-      "### Hi naonao\n- 点击卡片空白处进入编辑模式\n- 点击页面空白处预览\n- 按住顶部移动位置\n- 按住右下角移动调整大小",
+      "## Hi naonao\n- 右键卡片进入编辑模式\n- 点击页面空白处预览\n- 按住顶部移动位置\n- 按住右下角移动调整大小",
   },
   en: {
     deleteConfirm: "Are you sure you want to delete this note?",
     invalidFormat: "Invalid file format",
-    imageTooLarge: "Image is larger than 4MB and cannot be pasted",
+    imageTooLarge: "Image is larger than 500KB and cannot be pasted",
     importConfirm: (importCount: number, existingIds: number, newIds: number) =>
       `Found ${importCount} note(s):\n- ${existingIds} existing note(s) will be updated\n- ${newIds} new note(s) will be added\n\nContinue?`,
     parseFailed: "Failed to parse JSON file",
     sunnyTheme: "Sunny",
     defaultText:
-      "### Hi naonao\n- Click on the empty area of a card to enter edit mode\n- Click on any empty area of the page to preview\n- Drag the top area to move the card\n- Drag the bottom-right corner to resize",
+      "## Hi naonao\n- Right-click a card to enter edit mode\n- Click on any empty area of the page to preview\n- Drag the top area to move the card\n- Drag the bottom-right corner to resize",
   },
 };
 
@@ -50,6 +50,10 @@ type Sticky = {
 
   text: string;
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 const defaultText = t.defaultText;
 const IMAGES_STORAGE_KEY = "stickyImages";
@@ -75,9 +79,9 @@ function deleteCard(id: string) {
   localStorage.setItem("stickys", JSON.stringify(stickys));
 }
 
-const MAX_PASTED_IMAGE_SIZE = 4 * 1024 * 1024;
+const MAX_PASTED_IMAGE_SIZE = 500 * 1024;
 let imageStore: Record<string, string> = JSON.parse(
-  localStorage.getItem(IMAGES_STORAGE_KEY) || "{}"
+  localStorage.getItem(IMAGES_STORAGE_KEY) || "{}",
 );
 let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -327,7 +331,7 @@ function toggleAllToPreview() {
 function createCard(
   id: string,
   data: Partial<Sticky>,
-  isEditing: boolean
+  isEditing: boolean,
 ): HTMLDivElement {
   const {
     zIndex = getMaxZIndex(),
@@ -377,7 +381,7 @@ function createCard(
     if (!items) return;
 
     const imageItem = Array.from(items).find((item) =>
-      item.type.startsWith("image/")
+      item.type.startsWith("image/"),
     );
     if (!imageItem) return;
 
@@ -433,12 +437,16 @@ function createCard(
     if (selection && selection.toString().length > 0) {
       return;
     }
+  });
 
-    // 只有点击预览空白处才进入编辑模式
-    if (target !== preview) {
-      return;
-    }
+  card.addEventListener("contextmenu", (e) => {
+    const target = e.target as HTMLElement;
+    if (target.closest("button") || target.closest(".resize")) return;
 
+    const isEditing = textarea.style.display !== "none";
+    if (isEditing) return;
+
+    e.preventDefault();
     e.stopPropagation();
     toggleEditMode(card, true);
   });
@@ -543,7 +551,7 @@ grid.addEventListener("mouseup", () => {
             width: widthRem,
             height: heightRem,
           },
-          true
+          true,
         );
 
         grid.appendChild(card);
@@ -589,7 +597,7 @@ const settingsContainer = document.querySelector<HTMLDivElement>("#settings")!;
 // 工具函数：将 SVG 字符串转换为 SVG 元素
 function createSvgElement(
   svgString: string,
-  attrs?: Record<string, string>
+  attrs?: Record<string, string>,
 ): SVGElement {
   const parser = new DOMParser();
   const svgDoc = parser.parseFromString(svgString, "image/svg+xml");
@@ -636,6 +644,7 @@ sunnyToggleInput.addEventListener("change", () => {
   const enabled = sunnyToggleInput.checked;
   applySunnyTheme(enabled);
   localStorage.setItem(SUNNY_THEME_STORAGE_KEY, enabled ? "1" : "0");
+  setSettingsExpanded(false);
 });
 
 const sunnyToggleText = document.createElement("span");
@@ -650,28 +659,36 @@ githubLink.target = "_blank";
 githubLink.appendChild(createSvgElement(github, { alt: "github" }));
 
 // 添加到容器
+settingsContainer.appendChild(sunnyToggle);
 settingsContainer.appendChild(downloadIcon);
 settingsContainer.appendChild(uploadIcon);
-settingsContainer.appendChild(sunnyToggle);
 settingsContainer.appendChild(settingsIcon);
 settingsContainer.appendChild(githubLink);
 
 let isExpanded = false;
-// 点击 settings 按钮展开/收起
-settingsIcon.addEventListener("click", () => {
-  isExpanded = !isExpanded;
+function setSettingsExpanded(expanded: boolean) {
+  isExpanded = expanded;
   downloadIcon.style.display = isExpanded ? "block" : "none";
   uploadIcon.style.display = isExpanded ? "block" : "none";
   sunnyToggle.style.display = isExpanded ? "inline-flex" : "none";
+}
+
+// 点击 settings 按钮展开/收起
+settingsIcon.addEventListener("click", () => {
+  setSettingsExpanded(!isExpanded);
 });
 
 // 导出功能
 downloadIcon.addEventListener("click", () => {
-  const stickysData = localStorage.getItem("stickys") || "{}";
+  setSettingsExpanded(false);
+  const exportData = JSON.stringify({
+    stickys,
+    stickyImages: imageStore,
+  });
   const timestamp = Date.now();
   const filename = `stickys-${timestamp}.json`;
 
-  const blob = new Blob([stickysData], { type: "application/json" });
+  const blob = new Blob([exportData], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -682,6 +699,7 @@ downloadIcon.addEventListener("click", () => {
 
 // 导入功能
 uploadIcon.addEventListener("click", () => {
+  setSettingsExpanded(false);
   const input = document.createElement("input");
   input.type = "file";
   input.accept = ".json";
@@ -697,18 +715,47 @@ uploadIcon.addEventListener("click", () => {
         const importedData = JSON.parse(content);
 
         // 验证数据格式
-        if (typeof importedData !== "object" || importedData === null) {
+        if (!isRecord(importedData)) {
           alert(t.invalidFormat);
           return;
         }
 
+        let importedStickys: Stickys;
+        let importedImages: Record<string, string> = {};
+
+        // 兼容两种导入格式：
+        // 1) 旧格式：直接是 stickys
+        // 2) 新格式：{ stickys, stickyImages }
+        if ("stickys" in importedData) {
+          const maybeStickys = importedData.stickys;
+          if (!isRecord(maybeStickys)) {
+            alert(t.invalidFormat);
+            return;
+          }
+          importedStickys = maybeStickys as Stickys;
+
+          const maybeImages = importedData.stickyImages;
+          if (isRecord(maybeImages)) {
+            const normalizedImages: Record<string, string> = {};
+            Object.entries(maybeImages).forEach(([key, value]) => {
+              if (key.length > 0 && typeof value === "string") {
+                normalizedImages[key] = value;
+              }
+            });
+            importedImages = normalizedImages;
+          }
+        } else {
+          importedStickys = importedData as Stickys;
+        }
+
         // 合并数据：相同 id 则修改，不同 id 则新增
-        const mergedStickys = { ...stickys, ...importedData };
+        const mergedStickys = { ...stickys, ...importedStickys };
+        const mergedImages = { ...imageStore, ...importedImages };
 
         // 确认导入
-        const importCount = Object.keys(importedData).length;
+        const importCount = Object.keys(importedStickys).length;
         const existingIds = Object.keys(stickys).filter(
-          (id) => id in importedData
+          (id) => id in importedStickys,
         ).length;
         const newIds = importCount - existingIds;
 
@@ -716,8 +763,10 @@ uploadIcon.addEventListener("click", () => {
 
         if (confirm(message)) {
           stickys = mergedStickys;
+          imageStore = mergedImages;
           cleanupUnusedImages();
           localStorage.setItem("stickys", JSON.stringify(stickys));
+          saveImageStore();
           // 刷新页面以加载新数据
           location.reload();
         }
