@@ -24,7 +24,7 @@ const texts = {
     exportLabel: "导出",
     importLabel: "导入",
     defaultText:
-      "## Hi naonao\n- 右键卡片进入编辑模式\n- 点击页面空白处预览\n- 按住顶部移动位置\n- 按住右下角移动调整大小",
+      "## Hi naonao\n- 右键卡片进入编辑模式\n- 点击页面空白处预览\n- 按住顶部移动位置\n- 按住右下角移动调整大小\n- 支持粘贴图片（单张不超过 500KB）",
   },
   en: {
     deleteConfirm: "Are you sure you want to delete this note?",
@@ -37,7 +37,7 @@ const texts = {
     exportLabel: "Export",
     importLabel: "Import",
     defaultText:
-      "## Hi naonao\n- Right-click a card to enter edit mode\n- Click on any empty area of the page to preview\n- Drag the top area to move the card\n- Drag the bottom-right corner to resize",
+      "## Hi naonao\n- Right-click a card to enter edit mode\n- Click on any empty area of the page to preview\n- Drag the top area to move the card\n- Drag the bottom-right corner to resize\n- Paste image is supported (up to 500KB each)",
   },
 };
 
