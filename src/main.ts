@@ -147,7 +147,7 @@ function scheduleCleanupUnusedImages() {
 
 function getSunnyThemeEnabled() {
   const stored = localStorage.getItem(SUNNY_THEME_STORAGE_KEY);
-  if (stored === null) return true;
+  if (stored === null) return false;
   return stored === "1";
 }
 
