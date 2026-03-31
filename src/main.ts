@@ -21,6 +21,8 @@ const texts = {
       `发现 ${importCount} 个便签：\n- ${existingIds} 个现有便签将被更新\n- ${newIds} 个新便签将被添加\n\n继续？`,
     parseFailed: "解析 JSON 文件失败",
     sunnyTheme: "Sunny",
+    exportLabel: "导出",
+    importLabel: "导入",
     defaultText:
       "## Hi naonao\n- 右键卡片进入编辑模式\n- 点击页面空白处预览\n- 按住顶部移动位置\n- 按住右下角移动调整大小",
   },
@@ -32,6 +34,8 @@ const texts = {
       `Found ${importCount} note(s):\n- ${existingIds} existing note(s) will be updated\n- ${newIds} new note(s) will be added\n\nContinue?`,
     parseFailed: "Failed to parse JSON file",
     sunnyTheme: "Sunny",
+    exportLabel: "Export",
+    importLabel: "Import",
     defaultText:
       "## Hi naonao\n- Right-click a card to enter edit mode\n- Click on any empty area of the page to preview\n- Drag the top area to move the card\n- Drag the bottom-right corner to resize",
   },
@@ -618,18 +622,35 @@ function createSvgElement(
 
   return svg as SVGElement;
 }
-// 创建 SVG 元素
-const downloadIcon = createSvgElement(download, {
-  alt: "download",
-  style: "display: none;",
-});
-const uploadIcon = createSvgElement(upload, {
-  alt: "upload",
-  style: "display: none;",
-});
 const settingsIcon = createSvgElement(settings, {
   alt: "settings",
 });
+
+function createSettingsAction(svgRaw: string, label: string) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "settings-action";
+  button.style.display = "none";
+
+  const iconWrap = document.createElement("span");
+  iconWrap.className = "settings-action-icon";
+  iconWrap.appendChild(
+    createSvgElement(svgRaw, {
+      width: "14",
+      height: "14",
+    }),
+  );
+
+  const text = document.createElement("span");
+  text.textContent = label;
+
+  button.appendChild(iconWrap);
+  button.appendChild(text);
+  return button;
+}
+
+const downloadAction = createSettingsAction(download, t.exportLabel);
+const uploadAction = createSettingsAction(upload, t.importLabel);
 
 const sunnyToggle = document.createElement("label");
 sunnyToggle.className = "sunny-toggle";
@@ -660,17 +681,64 @@ githubLink.appendChild(createSvgElement(github, { alt: "github" }));
 
 // 添加到容器
 settingsContainer.appendChild(sunnyToggle);
-settingsContainer.appendChild(downloadIcon);
-settingsContainer.appendChild(uploadIcon);
+settingsContainer.appendChild(downloadAction);
+settingsContainer.appendChild(uploadAction);
 settingsContainer.appendChild(settingsIcon);
 settingsContainer.appendChild(githubLink);
 
 let isExpanded = false;
+const settingsItems: HTMLElement[] = [sunnyToggle, downloadAction, uploadAction];
+const SETTINGS_ITEM_ANIMATION_STEP_MS = 45;
+const SETTINGS_ITEM_ANIMATION_DURATION_MS = 260;
+let settingsAnimationTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearSettingsAnimationTimer() {
+  if (settingsAnimationTimer) {
+    clearTimeout(settingsAnimationTimer);
+    settingsAnimationTimer = null;
+  }
+}
+
 function setSettingsExpanded(expanded: boolean) {
+  clearSettingsAnimationTimer();
   isExpanded = expanded;
-  downloadIcon.style.display = isExpanded ? "block" : "none";
-  uploadIcon.style.display = isExpanded ? "block" : "none";
-  sunnyToggle.style.display = isExpanded ? "inline-flex" : "none";
+
+  const animatedOrder = [...settingsItems].reverse();
+  if (!isExpanded) {
+    animatedOrder.forEach((item, index) => {
+      item.classList.remove("settings-pop-in");
+      item.classList.remove("settings-pop-out");
+      item.style.pointerEvents = "none";
+      item.style.animationDelay = `${index * SETTINGS_ITEM_ANIMATION_STEP_MS}ms`;
+      void item.offsetWidth;
+      item.classList.add("settings-pop-out");
+    });
+
+    const hideDelay =
+      (animatedOrder.length - 1) * SETTINGS_ITEM_ANIMATION_STEP_MS +
+      SETTINGS_ITEM_ANIMATION_DURATION_MS;
+    settingsAnimationTimer = setTimeout(() => {
+      settingsItems.forEach((item) => {
+        item.style.display = "none";
+        item.style.pointerEvents = "";
+        item.classList.remove("settings-pop-out");
+        item.style.animationDelay = "0ms";
+      });
+      settingsAnimationTimer = null;
+    }, hideDelay);
+    return;
+  }
+
+  animatedOrder.forEach((item, index) => {
+    item.style.display = "inline-flex";
+    item.style.pointerEvents = "";
+    item.classList.remove("settings-pop-in");
+    item.classList.remove("settings-pop-out");
+    item.style.animationDelay = `${index * SETTINGS_ITEM_ANIMATION_STEP_MS}ms`;
+    // 触发重排以确保重复展开时动画可重新播放
+    void item.offsetWidth;
+    item.classList.add("settings-pop-in");
+  });
 }
 
 // 点击 settings 按钮展开/收起
@@ -679,7 +747,7 @@ settingsIcon.addEventListener("click", () => {
 });
 
 // 导出功能
-downloadIcon.addEventListener("click", () => {
+downloadAction.addEventListener("click", () => {
   setSettingsExpanded(false);
   const exportData = JSON.stringify({
     stickys,
@@ -698,7 +766,7 @@ downloadIcon.addEventListener("click", () => {
 });
 
 // 导入功能
-uploadIcon.addEventListener("click", () => {
+uploadAction.addEventListener("click", () => {
   setSettingsExpanded(false);
   const input = document.createElement("input");
   input.type = "file";

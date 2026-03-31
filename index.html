@@ -4,6 +4,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script>
+    (() => {
+      const lang = navigator.language.toLowerCase();
+      document.documentElement.lang = lang.startsWith("zh") ? "zh" : "en";
+    })();
+  </script>
   <title>Sticky Board</title>
   <meta name="description"
     content="A clean and elegant web-based sticky notes board that supports drag-and-drop operations, grid snapping, and Markdown syntax. All data is stored locally only. No account required, no synchronization needed — just open and use. 一个简洁优雅的网页便签板，用于可视化思考，支持拖拽操作和 Markdown 语法。所有数据仅保存在本地，无需账号，无需同步，打开即用。" />
