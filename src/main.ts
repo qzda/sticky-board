@@ -16,7 +16,7 @@ const texts = {
   zh: {
     deleteConfirm: "确定要删除这个便签吗？",
     invalidFormat: "无效的文件格式",
-    imageTooLarge: "图片超过 500KB，无法粘贴",
+    imageTooLarge: "图片超过 20MB，无法粘贴",
     importConfirm: (importCount: number, existingIds: number, newIds: number) =>
       `发现 ${importCount} 个便签：\n- ${existingIds} 个现有便签将被更新\n- ${newIds} 个新便签将被添加\n\n继续？`,
     parseFailed: "解析 JSON 文件失败",
@@ -29,7 +29,7 @@ const texts = {
   en: {
     deleteConfirm: "Are you sure you want to delete this note?",
     invalidFormat: "Invalid file format",
-    imageTooLarge: "Image is larger than 500KB and cannot be pasted",
+    imageTooLarge: "Image is larger than 20MB and cannot be pasted",
     importConfirm: (importCount: number, existingIds: number, newIds: number) =>
       `Found ${importCount} note(s):\n- ${existingIds} existing note(s) will be updated\n- ${newIds} new note(s) will be added\n\nContinue?`,
     parseFailed: "Failed to parse JSON file",
@@ -65,6 +65,248 @@ const IMAGE_SRC_PREFIX = "sticky-image://";
 const IMAGE_KEY_PATTERN = /!\[[^\]]*]\(sticky-image:\/\/([a-zA-Z0-9_-]+)\)/g;
 const SUNNY_THEME_STORAGE_KEY = "sunnyThemeEnabled";
 const CLEANUP_DEBOUNCE_MS = 800;
+const DB_NAME = "sticky-board-db";
+const DB_VERSION = 1;
+const DB_STORE = "app-state";
+const DB_KEY_STICKYS = "stickys";
+const DB_KEY_IMAGES = "stickyImages";
+
+type PersistRecord = {
+  key: string;
+  value: unknown;
+};
+
+let stickys: Stickys = {};
+let imageStore: Record<string, Blob> = {};
+const imageUrlCache = new Map<string, string>();
+
+function openAppDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(DB_STORE)) {
+        db.createObjectStore(DB_STORE, { keyPath: "key" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function readPersistedValue<T>(key: string): Promise<T | undefined> {
+  const db = await openAppDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, "readonly");
+    const store = tx.objectStore(DB_STORE);
+    const request = store.get(key);
+    request.onsuccess = () => {
+      const row = request.result as PersistRecord | undefined;
+      resolve((row?.value as T | undefined) ?? undefined);
+    };
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => db.close();
+    tx.onabort = () => db.close();
+  });
+}
+
+async function writePersistedValue(key: string, value: unknown): Promise<void> {
+  const db = await openAppDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, "readwrite");
+    const store = tx.objectStore(DB_STORE);
+    store.put({ key, value } as PersistRecord);
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
+    tx.onabort = () => {
+      db.close();
+      reject(tx.error);
+    };
+  });
+}
+
+async function persistStickys() {
+  await writePersistedValue(DB_KEY_STICKYS, stickys);
+}
+
+async function persistImageStore() {
+  await writePersistedValue(DB_KEY_IMAGES, imageStore);
+}
+
+function revokeImageUrl(key: string) {
+  const cached = imageUrlCache.get(key);
+  if (!cached) return;
+  URL.revokeObjectURL(cached);
+  imageUrlCache.delete(key);
+}
+
+function revokeAllImageUrls() {
+  imageUrlCache.forEach((url) => URL.revokeObjectURL(url));
+  imageUrlCache.clear();
+}
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const commaIndex = dataUrl.indexOf(",");
+  if (commaIndex < 0 || !dataUrl.startsWith("data:")) {
+    throw new Error("Invalid data URL");
+  }
+
+  const meta = dataUrl.slice(5, commaIndex);
+  const payload = dataUrl.slice(commaIndex + 1);
+  const mime = meta.split(";")[0] || "application/octet-stream";
+  const isBase64 = meta.includes(";base64");
+  const binary = isBase64 ? atob(payload) : decodeURIComponent(payload);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mime });
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function normalizeImageMap(
+  source: Record<string, unknown>,
+): Promise<Record<string, Blob>> {
+  const normalized: Record<string, Blob> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (key.length === 0) continue;
+    if (value instanceof Blob) {
+      normalized[key] = value;
+      continue;
+    }
+    if (typeof value === "string" && value.startsWith("data:")) {
+      try {
+        normalized[key] = dataUrlToBlob(value);
+      } catch (error) {
+        console.warn(`[storage] invalid image data for key: ${key}`, error);
+      }
+    }
+  }
+  return normalized;
+}
+
+function getImageObjectUrl(key: string, blob: Blob): string {
+  const cached = imageUrlCache.get(key);
+  if (cached) return cached;
+  const objectUrl = URL.createObjectURL(blob);
+  imageUrlCache.set(key, objectUrl);
+  return objectUrl;
+}
+
+async function requestPersistentStorage() {
+  if (!("storage" in navigator) || !navigator.storage.persist) {
+    console.log("[storage] persistent storage API not available");
+    return;
+  }
+  try {
+    const granted = await navigator.storage.persist();
+    console.log(
+      `[storage] persistent storage request: ${granted ? "granted" : "not granted"}`,
+    );
+  } catch (error) {
+    console.warn("[storage] persistent storage request failed", error);
+  }
+}
+
+async function migrateLocalStorageToIndexedDb() {
+  const localStickysRaw = localStorage.getItem(DB_KEY_STICKYS);
+  const localImagesRaw = localStorage.getItem(IMAGES_STORAGE_KEY);
+  const hasLocalData = localStickysRaw !== null || localImagesRaw !== null;
+
+  if (!hasLocalData) {
+    console.log("[storage] no localStorage data to migrate");
+    return;
+  }
+
+  console.log("[storage] localStorage migration started");
+
+  let migratedStickys: Stickys | null = null;
+  let migratedImages: Record<string, Blob> | null = null;
+
+  if (localStickysRaw !== null) {
+    try {
+      const parsed = JSON.parse(localStickysRaw);
+      if (isRecord(parsed)) {
+        migratedStickys = parsed as Stickys;
+        console.log(
+          `[storage] found local stickys: ${Object.keys(migratedStickys).length}`,
+        );
+      } else {
+        console.warn("[storage] local stickys format invalid, skipped");
+      }
+    } catch (error) {
+      console.warn("[storage] local stickys parse failed, skipped", error);
+    }
+  }
+
+  if (localImagesRaw !== null) {
+    try {
+      const parsed = JSON.parse(localImagesRaw);
+      if (isRecord(parsed)) {
+        migratedImages = await normalizeImageMap(parsed);
+        console.log(
+          `[storage] found local images: ${Object.keys(migratedImages).length}`,
+        );
+      } else {
+        console.warn("[storage] local images format invalid, skipped");
+      }
+    } catch (error) {
+      console.warn("[storage] local images parse failed, skipped", error);
+    }
+  }
+
+  const existingStickys = (await readPersistedValue<Stickys>(DB_KEY_STICKYS)) || {};
+  const existingImagesRaw =
+    (await readPersistedValue<Record<string, unknown>>(DB_KEY_IMAGES)) || {};
+  const existingImages = isRecord(existingImagesRaw)
+    ? await normalizeImageMap(existingImagesRaw)
+    : {};
+
+  const finalStickys = migratedStickys
+    ? { ...existingStickys, ...migratedStickys }
+    : existingStickys;
+  const finalImages = migratedImages
+    ? { ...existingImages, ...migratedImages }
+    : existingImages;
+
+  await writePersistedValue(DB_KEY_STICKYS, finalStickys);
+  await writePersistedValue(DB_KEY_IMAGES, finalImages);
+  localStorage.removeItem(DB_KEY_STICKYS);
+  localStorage.removeItem(IMAGES_STORAGE_KEY);
+
+  console.log(
+    `[storage] migration completed (stickys: ${Object.keys(finalStickys).length}, images: ${Object.keys(finalImages).length})`,
+  );
+  console.log(
+    `[storage] localStorage cleaned, kept keys: ${SUNNY_THEME_STORAGE_KEY}`,
+  );
+}
+
+async function loadStateFromIndexedDb() {
+  const loadedStickys = await readPersistedValue<Stickys>(DB_KEY_STICKYS);
+  const loadedImagesRaw =
+    await readPersistedValue<Record<string, unknown>>(DB_KEY_IMAGES);
+
+  stickys = loadedStickys && isRecord(loadedStickys) ? loadedStickys : {};
+  imageStore =
+    loadedImagesRaw && isRecord(loadedImagesRaw)
+      ? await normalizeImageMap(loadedImagesRaw)
+      : {};
+}
 
 function save(id: string, data: Partial<Sticky>) {
   stickys[id] = {
@@ -74,36 +316,31 @@ function save(id: string, data: Partial<Sticky>) {
   if (data.text !== undefined) {
     scheduleCleanupUnusedImages();
   }
-  localStorage.setItem("stickys", JSON.stringify(stickys));
+  void persistStickys().catch((error) => {
+    console.error("[storage] failed to persist stickys", error);
+  });
 }
 
 function deleteCard(id: string) {
   delete stickys[id];
   cleanupUnusedImages();
-  localStorage.setItem("stickys", JSON.stringify(stickys));
-}
-
-const MAX_PASTED_IMAGE_SIZE = 500 * 1024;
-let imageStore: Record<string, string> = JSON.parse(
-  localStorage.getItem(IMAGES_STORAGE_KEY) || "{}",
-);
-let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
-
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
+  void persistStickys().catch((error) => {
+    console.error("[storage] failed to persist stickys", error);
   });
 }
 
+const MAX_PASTED_IMAGE_SIZE = 20 * 1024 * 1024;
+let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
+
 function saveImageStore() {
-  localStorage.setItem(IMAGES_STORAGE_KEY, JSON.stringify(imageStore));
+  void persistImageStore().catch((error) => {
+    console.error("[storage] failed to persist images", error);
+  });
 }
 
-function createImageKey() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+function createImageKey(stickyId: string) {
+  const imageId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `${stickyId}-${imageId}`;
 }
 
 function extractReferencedImageKeys(text: string): Set<string> {
@@ -132,6 +369,7 @@ function cleanupUnusedImages() {
 
   Object.keys(imageStore).forEach((key) => {
     if (!referencedKeys.has(key)) {
+      revokeImageUrl(key);
       delete imageStore[key];
       changed = true;
     }
@@ -279,7 +517,7 @@ md.renderer.rules.image = (tokens, idx, options, _env, self) => {
     const imageData = imageStore[key];
 
     if (imageData) {
-      token.attrSet("src", imageData);
+      token.attrSet("src", getImageObjectUrl(key, imageData));
       token.attrSet("data-image-key", key);
     } else {
       token.attrSet("alt", "[missing image]");
@@ -400,9 +638,8 @@ function createCard(
     }
 
     try {
-      const dataUrl = await fileToDataUrl(file);
-      const imageKey = createImageKey();
-      imageStore[imageKey] = dataUrl;
+      const imageKey = createImageKey(id);
+      imageStore[imageKey] = file;
       saveImageStore();
 
       const markdownImage = `\n![pasted-image](${IMAGE_SRC_PREFIX}${imageKey})\n`;
@@ -587,13 +824,26 @@ function getMaxZIndex(): number {
   const zIndexes = Object.values(stickys).map((s) => s.zIndex || 1);
   return zIndexes.length > 0 ? Math.max(...zIndexes) : 1;
 }
-// 加载已保存的便签
-let stickys: Stickys = JSON.parse(localStorage.getItem("stickys") || "{}");
-cleanupUnusedImages();
-Object.entries(stickys).forEach(([id, data]) => {
-  const card = createCard(id, data, false);
 
-  grid.appendChild(card);
+async function initializeState() {
+  try {
+    await requestPersistentStorage();
+    await migrateLocalStorageToIndexedDb();
+    await loadStateFromIndexedDb();
+    cleanupUnusedImages();
+    Object.entries(stickys).forEach(([id, data]) => {
+      const card = createCard(id, data, false);
+      grid.appendChild(card);
+    });
+  } catch (error) {
+    console.error("[storage] initialization failed", error);
+  }
+}
+
+void initializeState();
+
+window.addEventListener("beforeunload", () => {
+  revokeAllImageUrls();
 });
 
 const settingsContainer = document.querySelector<HTMLDivElement>("#settings")!;
@@ -747,22 +997,30 @@ settingsIcon.addEventListener("click", () => {
 });
 
 // 导出功能
-downloadAction.addEventListener("click", () => {
+downloadAction.addEventListener("click", async () => {
   setSettingsExpanded(false);
-  const exportData = JSON.stringify({
-    stickys,
-    stickyImages: imageStore,
-  });
-  const timestamp = Date.now();
-  const filename = `stickys-${timestamp}.json`;
+  try {
+    const stickyImages: Record<string, string> = {};
+    for (const [key, blob] of Object.entries(imageStore)) {
+      stickyImages[key] = await blobToDataUrl(blob);
+    }
+    const exportData = JSON.stringify({
+      stickys,
+      stickyImages,
+    });
+    const timestamp = Date.now();
+    const filename = `stickys-${timestamp}.json`;
 
-  const blob = new Blob([exportData], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+    const blob = new Blob([exportData], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error("[storage] export failed", error);
+  }
 });
 
 // 导入功能
@@ -777,7 +1035,7 @@ uploadAction.addEventListener("click", () => {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const content = event.target?.result as string;
         const importedData = JSON.parse(content);
@@ -789,7 +1047,7 @@ uploadAction.addEventListener("click", () => {
         }
 
         let importedStickys: Stickys;
-        let importedImages: Record<string, string> = {};
+        let importedImages: Record<string, Blob> = {};
 
         // 兼容两种导入格式：
         // 1) 旧格式：直接是 stickys
@@ -804,13 +1062,7 @@ uploadAction.addEventListener("click", () => {
 
           const maybeImages = importedData.stickyImages;
           if (isRecord(maybeImages)) {
-            const normalizedImages: Record<string, string> = {};
-            Object.entries(maybeImages).forEach(([key, value]) => {
-              if (key.length > 0 && typeof value === "string") {
-                normalizedImages[key] = value;
-              }
-            });
-            importedImages = normalizedImages;
+            importedImages = await normalizeImageMap(maybeImages);
           }
         } else {
           importedStickys = importedData as Stickys;
@@ -830,10 +1082,13 @@ uploadAction.addEventListener("click", () => {
         const message = t.importConfirm(importCount, existingIds, newIds);
 
         if (confirm(message)) {
+          Object.keys(importedImages).forEach((key) => revokeImageUrl(key));
           stickys = mergedStickys;
           imageStore = mergedImages;
           cleanupUnusedImages();
-          localStorage.setItem("stickys", JSON.stringify(stickys));
+          void persistStickys().catch((error) => {
+            console.error("[storage] failed to persist imported stickys", error);
+          });
           saveImageStore();
           // 刷新页面以加载新数据
           location.reload();
