@@ -2,6 +2,7 @@
   "name": "Sticky Board",
   "short_name": "Sticky Board",
   "description": "A clean and elegant web-based sticky notes board",
+  "id": "/",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -17,6 +18,21 @@
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/demo.png",
+      "sizes": "1001x929",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Sticky Board desktop view"
+    },
+    {
+      "src": "/demo.png",
+      "sizes": "1001x929",
+      "type": "image/png",
+      "label": "Sticky Board mobile view"
     }
   ],
   "categories": ["productivity", "utilities"],
