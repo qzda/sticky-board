@@ -7,6 +7,10 @@ import upload from "./assets/upload.svg?raw";
 import github from "./assets/github.svg?raw";
 import leavesVideo from "./assets/leaves.mp4";
 
+/**
+ * Detects UI language from browser locale.
+ * @returns {"zh" | "en"} Language code used by this app.
+ */
 function getLanguage(): "zh" | "en" {
   const lang = navigator.language.toLowerCase();
   return lang.startsWith("zh") ? "zh" : "en";
@@ -55,6 +59,11 @@ type Sticky = {
   text: string;
 };
 
+/**
+ * Checks whether a value is a plain object record.
+ * @param {unknown} value The value to validate.
+ * @returns {value is Record<string, unknown>} True when value is a non-null object and not an array.
+ */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -80,6 +89,10 @@ let stickys: Stickys = {};
 let imageStore: Record<string, Blob> = {};
 const imageUrlCache = new Map<string, string>();
 
+/**
+ * Opens the IndexedDB database and creates stores on first run.
+ * @returns {Promise<IDBDatabase>} Open database handle.
+ */
 function openAppDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -94,6 +107,12 @@ function openAppDb(): Promise<IDBDatabase> {
   });
 }
 
+/**
+ * Reads a value by key from app state store.
+ * @template T
+ * @param {string} key Storage key.
+ * @returns {Promise<T | undefined>} Stored value, or undefined if key is missing.
+ */
 async function readPersistedValue<T>(key: string): Promise<T | undefined> {
   const db = await openAppDb();
   return new Promise((resolve, reject) => {
@@ -110,6 +129,12 @@ async function readPersistedValue<T>(key: string): Promise<T | undefined> {
   });
 }
 
+/**
+ * Writes a key/value pair to app state store.
+ * @param {string} key Storage key.
+ * @param {unknown} value Value to persist.
+ * @returns {Promise<void>}
+ */
 async function writePersistedValue(key: string, value: unknown): Promise<void> {
   const db = await openAppDb();
   return new Promise((resolve, reject) => {
@@ -131,26 +156,48 @@ async function writePersistedValue(key: string, value: unknown): Promise<void> {
   });
 }
 
-async function persistStickys() {
+/**
+ * Persists current stickys map to IndexedDB.
+ * @returns {Promise<void>}
+ */
+async function persistStickys(): Promise<void> {
   await writePersistedValue(DB_KEY_STICKYS, stickys);
 }
 
-async function persistImageStore() {
+/**
+ * Persists current image store to IndexedDB.
+ * @returns {Promise<void>}
+ */
+async function persistImageStore(): Promise<void> {
   await writePersistedValue(DB_KEY_IMAGES, imageStore);
 }
 
-function revokeImageUrl(key: string) {
+/**
+ * Revokes a cached object URL for an image key.
+ * @param {string} key Image key.
+ * @returns {void}
+ */
+function revokeImageUrl(key: string): void {
   const cached = imageUrlCache.get(key);
   if (!cached) return;
   URL.revokeObjectURL(cached);
   imageUrlCache.delete(key);
 }
 
-function revokeAllImageUrls() {
+/**
+ * Revokes all cached object URLs.
+ * @returns {void}
+ */
+function revokeAllImageUrls(): void {
   imageUrlCache.forEach((url) => URL.revokeObjectURL(url));
   imageUrlCache.clear();
 }
 
+/**
+ * Converts a data URL string to Blob.
+ * @param {string} dataUrl Data URL to decode.
+ * @returns {Blob} Decoded blob.
+ */
 function dataUrlToBlob(dataUrl: string): Blob {
   const commaIndex = dataUrl.indexOf(",");
   if (commaIndex < 0 || !dataUrl.startsWith("data:")) {
@@ -169,6 +216,11 @@ function dataUrlToBlob(dataUrl: string): Blob {
   return new Blob([bytes], { type: mime });
 }
 
+/**
+ * Converts a Blob to data URL string.
+ * @param {Blob} blob Blob to encode.
+ * @returns {Promise<string>} Encoded data URL.
+ */
 function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -178,6 +230,11 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+/**
+ * Normalizes heterogeneous image map values into Blob values.
+ * @param {Record<string, unknown>} source Raw image map.
+ * @returns {Promise<Record<string, Blob>>} Normalized image map.
+ */
 async function normalizeImageMap(
   source: Record<string, unknown>,
 ): Promise<Record<string, Blob>> {
@@ -199,6 +256,12 @@ async function normalizeImageMap(
   return normalized;
 }
 
+/**
+ * Returns cached object URL for a blob, creating one if needed.
+ * @param {string} key Image key.
+ * @param {Blob} blob Image blob.
+ * @returns {string} Object URL for rendering.
+ */
 function getImageObjectUrl(key: string, blob: Blob): string {
   const cached = imageUrlCache.get(key);
   if (cached) return cached;
@@ -207,7 +270,11 @@ function getImageObjectUrl(key: string, blob: Blob): string {
   return objectUrl;
 }
 
-async function requestPersistentStorage() {
+/**
+ * Requests persistent storage from browser.
+ * @returns {Promise<void>}
+ */
+async function requestPersistentStorage(): Promise<void> {
   if (!("storage" in navigator) || !navigator.storage.persist) {
     console.log("[storage] persistent storage API not available");
     return;
@@ -222,7 +289,12 @@ async function requestPersistentStorage() {
   }
 }
 
-async function migrateLocalStorageToIndexedDb() {
+/**
+ * Migrates legacy localStorage data into IndexedDB and removes old keys.
+ * Keeps settings keys in localStorage.
+ * @returns {Promise<void>}
+ */
+async function migrateLocalStorageToIndexedDb(): Promise<void> {
   const localStickysRaw = localStorage.getItem(DB_KEY_STICKYS);
   const localImagesRaw = localStorage.getItem(IMAGES_STORAGE_KEY);
   const hasLocalData = localStickysRaw !== null || localImagesRaw !== null;
@@ -296,7 +368,11 @@ async function migrateLocalStorageToIndexedDb() {
   );
 }
 
-async function loadStateFromIndexedDb() {
+/**
+ * Loads app state from IndexedDB into in-memory state.
+ * @returns {Promise<void>}
+ */
+async function loadStateFromIndexedDb(): Promise<void> {
   const loadedStickys = await readPersistedValue<Stickys>(DB_KEY_STICKYS);
   const loadedImagesRaw =
     await readPersistedValue<Record<string, unknown>>(DB_KEY_IMAGES);
@@ -308,7 +384,13 @@ async function loadStateFromIndexedDb() {
       : {};
 }
 
-function save(id: string, data: Partial<Sticky>) {
+/**
+ * Updates a sticky card and schedules persistence.
+ * @param {string} id Sticky id.
+ * @param {Partial<Sticky>} data Partial sticky patch.
+ * @returns {void}
+ */
+function save(id: string, data: Partial<Sticky>): void {
   stickys[id] = {
     ...stickys[id],
     ...data,
@@ -321,7 +403,12 @@ function save(id: string, data: Partial<Sticky>) {
   });
 }
 
-function deleteCard(id: string) {
+/**
+ * Deletes a sticky card and persists state.
+ * @param {string} id Sticky id.
+ * @returns {void}
+ */
+function deleteCard(id: string): void {
   delete stickys[id];
   cleanupUnusedImages();
   void persistStickys().catch((error) => {
@@ -332,17 +419,31 @@ function deleteCard(id: string) {
 const MAX_PASTED_IMAGE_SIZE = 20 * 1024 * 1024;
 let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
 
-function saveImageStore() {
+/**
+ * Schedules image store persistence.
+ * @returns {void}
+ */
+function saveImageStore(): void {
   void persistImageStore().catch((error) => {
     console.error("[storage] failed to persist images", error);
   });
 }
 
-function createImageKey(stickyId: string) {
+/**
+ * Builds an image key namespaced by sticky id.
+ * @param {string} stickyId Sticky id.
+ * @returns {string} Image key in format: [stickyID]-[imageID].
+ */
+function createImageKey(stickyId: string): string {
   const imageId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   return `${stickyId}-${imageId}`;
 }
 
+/**
+ * Extracts image keys referenced in markdown text.
+ * @param {string} text Markdown text.
+ * @returns {Set<string>} Referenced image key set.
+ */
 function extractReferencedImageKeys(text: string): Set<string> {
   const keys = new Set<string>();
   IMAGE_KEY_PATTERN.lastIndex = 0;
@@ -354,6 +455,10 @@ function extractReferencedImageKeys(text: string): Set<string> {
   return keys;
 }
 
+/**
+ * Collects all referenced image keys across all stickys.
+ * @returns {Set<string>} Global referenced image key set.
+ */
 function getAllReferencedImageKeys(): Set<string> {
   const allKeys = new Set<string>();
   Object.values(stickys).forEach((sticky) => {
@@ -363,7 +468,11 @@ function getAllReferencedImageKeys(): Set<string> {
   return allKeys;
 }
 
-function cleanupUnusedImages() {
+/**
+ * Removes unreferenced images from store and persists changes.
+ * @returns {void}
+ */
+function cleanupUnusedImages(): void {
   const referencedKeys = getAllReferencedImageKeys();
   let changed = false;
 
@@ -380,7 +489,11 @@ function cleanupUnusedImages() {
   }
 }
 
-function scheduleCleanupUnusedImages() {
+/**
+ * Debounces image cleanup during text edits.
+ * @returns {void}
+ */
+function scheduleCleanupUnusedImages(): void {
   if (cleanupTimer) {
     clearTimeout(cleanupTimer);
   }
@@ -391,13 +504,22 @@ function scheduleCleanupUnusedImages() {
   }, CLEANUP_DEBOUNCE_MS);
 }
 
-function getSunnyThemeEnabled() {
+/**
+ * Reads sunny theme setting from localStorage.
+ * @returns {boolean} Whether sunny theme should be enabled.
+ */
+function getSunnyThemeEnabled(): boolean {
   const stored = localStorage.getItem(SUNNY_THEME_STORAGE_KEY);
   if (stored === null) return false;
   return stored === "1";
 }
 
-function applySunnyTheme(enabled: boolean) {
+/**
+ * Toggles sunny theme and syncs background video playback.
+ * @param {boolean} enabled Whether sunny theme is enabled.
+ * @returns {void}
+ */
+function applySunnyTheme(enabled: boolean): void {
   document.body.classList.toggle("sunny-theme", enabled);
   if (enabled) {
     ensureSunnyVideoOverlay();
@@ -405,7 +527,11 @@ function applySunnyTheme(enabled: boolean) {
   syncSunnyVideoPlayback();
 }
 
-function syncSunnyVideoPlayback() {
+/**
+ * Starts or pauses sunny video depending on visibility and setting.
+ * @returns {void}
+ */
+function syncSunnyVideoPlayback(): void {
   if (!sunnyVideoElement) return;
 
   const enabled = document.body.classList.contains("sunny-theme");
@@ -422,7 +548,11 @@ let imagePreviewElement: HTMLImageElement | null = null;
 let sunnyVideoOverlay: HTMLDivElement | null = null;
 let sunnyVideoElement: HTMLVideoElement | null = null;
 
-function ensureSunnyVideoOverlay() {
+/**
+ * Lazily creates sunny video overlay.
+ * @returns {void}
+ */
+function ensureSunnyVideoOverlay(): void {
   if (sunnyVideoOverlay && sunnyVideoElement) return;
 
   sunnyVideoOverlay = document.createElement("div");
@@ -447,7 +577,11 @@ document.addEventListener("visibilitychange", () => {
   syncSunnyVideoPlayback();
 });
 
-function ensureImagePreviewOverlay() {
+/**
+ * Lazily creates image preview overlay.
+ * @returns {void}
+ */
+function ensureImagePreviewOverlay(): void {
   if (imagePreviewOverlay && imagePreviewElement) return;
 
   imagePreviewOverlay = document.createElement("div");
@@ -472,7 +606,13 @@ function ensureImagePreviewOverlay() {
   document.body.appendChild(imagePreviewOverlay);
 }
 
-function openImagePreview(src: string, alt = "") {
+/**
+ * Opens image preview modal.
+ * @param {string} src Image source URL.
+ * @param {string} [alt=""] Image alt text.
+ * @returns {void}
+ */
+function openImagePreview(src: string, alt: string = ""): void {
   ensureImagePreviewOverlay();
   if (!imagePreviewOverlay || !imagePreviewElement) return;
 
@@ -487,7 +627,6 @@ const md = new MarkdownIt({
   breaks: true, // 换行转 <br>
 });
 
-// 所有链接在新窗口打开
 md.renderer.rules.link_open = (tokens, idx, options, _env, self) => {
   const token = tokens[idx];
 
@@ -527,13 +666,22 @@ md.renderer.rules.image = (tokens, idx, options, _env, self) => {
   return self.renderToken(tokens, idx, options);
 };
 
-// 将文本转换为带链接的 HTML
+/**
+ * Renders markdown text to HTML.
+ * @param {string} text Markdown source.
+ * @returns {string} Rendered HTML.
+ */
 function textToHtml(text: string): string {
   return md.render(text);
 }
 
-// 切换编辑/预览模式
-function toggleEditMode(card: HTMLElement, isEditing: boolean) {
+/**
+ * Switches one card between edit and preview mode.
+ * @param {HTMLElement} card Card element.
+ * @param {boolean} isEditing Whether to switch into edit mode.
+ * @returns {void}
+ */
+function toggleEditMode(card: HTMLElement, isEditing: boolean): void {
   setTimeout(() => {
     const textarea = card.querySelector("textarea") as HTMLTextAreaElement;
     const preview = card.querySelector(".preview") as HTMLDivElement;
@@ -555,8 +703,11 @@ function toggleEditMode(card: HTMLElement, isEditing: boolean) {
   });
 }
 
-// 切换所有卡片到预览模式
-function toggleAllToPreview() {
+/**
+ * Switches all cards to preview mode.
+ * @returns {void}
+ */
+function toggleAllToPreview(): void {
   const cards = document.querySelectorAll<HTMLDivElement>(".card");
   cards.forEach((card) => {
     const textarea = card.querySelector("textarea") as HTMLTextAreaElement;
@@ -570,6 +721,13 @@ function toggleAllToPreview() {
   });
 }
 
+/**
+ * Creates a sticky card DOM node and wires interactions.
+ * @param {string} id Sticky id.
+ * @param {Partial<Sticky>} data Initial sticky data.
+ * @param {boolean} isEditing Whether card starts in edit mode.
+ * @returns {HTMLDivElement} Card element.
+ */
 function createCard(
   id: string,
   data: Partial<Sticky>,
@@ -819,13 +977,20 @@ document.body.addEventListener("click", (e) => {
   }
 });
 
-// 获取最大的 zIndex
+/**
+ * Returns current maximum z-index across all stickys.
+ * @returns {number} Maximum z-index value.
+ */
 function getMaxZIndex(): number {
   const zIndexes = Object.values(stickys).map((s) => s.zIndex || 1);
   return zIndexes.length > 0 ? Math.max(...zIndexes) : 1;
 }
 
-async function initializeState() {
+/**
+ * Initializes storage, migration and initial card rendering.
+ * @returns {Promise<void>}
+ */
+async function initializeState(): Promise<void> {
   try {
     await requestPersistentStorage();
     await migrateLocalStorageToIndexedDb();
@@ -848,7 +1013,12 @@ window.addEventListener("beforeunload", () => {
 
 const settingsContainer = document.querySelector<HTMLDivElement>("#settings")!;
 
-// 工具函数：将 SVG 字符串转换为 SVG 元素
+/**
+ * Converts raw SVG markup into an SVGElement and applies optional attributes.
+ * @param {string} svgString Raw SVG string.
+ * @param {Record<string, string>} [attrs] Optional attributes to set.
+ * @returns {SVGElement} Parsed SVG element.
+ */
 function createSvgElement(
   svgString: string,
   attrs?: Record<string, string>,
@@ -876,7 +1046,13 @@ const settingsIcon = createSvgElement(settings, {
   alt: "settings",
 });
 
-function createSettingsAction(svgRaw: string, label: string) {
+/**
+ * Creates an action button used in settings panel.
+ * @param {string} svgRaw Raw icon SVG.
+ * @param {string} label Button label.
+ * @returns {HTMLButtonElement} Settings action button.
+ */
+function createSettingsAction(svgRaw: string, label: string): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "settings-action";
@@ -942,14 +1118,23 @@ const SETTINGS_ITEM_ANIMATION_STEP_MS = 45;
 const SETTINGS_ITEM_ANIMATION_DURATION_MS = 260;
 let settingsAnimationTimer: ReturnType<typeof setTimeout> | null = null;
 
-function clearSettingsAnimationTimer() {
+/**
+ * Clears pending settings animation timer.
+ * @returns {void}
+ */
+function clearSettingsAnimationTimer(): void {
   if (settingsAnimationTimer) {
     clearTimeout(settingsAnimationTimer);
     settingsAnimationTimer = null;
   }
 }
 
-function setSettingsExpanded(expanded: boolean) {
+/**
+ * Expands or collapses settings items with animation.
+ * @param {boolean} expanded Target expanded state.
+ * @returns {void}
+ */
+function setSettingsExpanded(expanded: boolean): void {
   clearSettingsAnimationTimer();
   isExpanded = expanded;
 
