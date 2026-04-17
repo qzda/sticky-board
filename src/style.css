@@ -81,6 +81,10 @@
   line-height: 1rem;
 }
 
+.card .preview img {
+  cursor: pointer;
+}
+
 .card .preview a {
   color: #0066cc;
   text-decoration: underline;
