@@ -301,6 +301,20 @@ body.sunny-theme {
 }
 
 @media (prefers-color-scheme: dark) {
+  #settings {
+    >* {
+      opacity: 0.85;
+    }
+
+    .sunny-toggle,
+    .settings-action {
+      background: rgba(12, 12, 12, 0.92);
+      color: #f5f7fa;
+      border-color: rgba(255, 255, 255, 0.52);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    }
+  }
+
   .card {
     box-shadow: none;
 
@@ -342,12 +356,6 @@ body.sunny-theme {
       opacity: 0;
       transform: translateX(14px);
     }
-  }
-
-  .sunny-toggle,
-  .settings-action {
-    background: rgba(20, 20, 20, 0.8);
-    border-color: rgba(255, 255, 255, 0.3);
   }
 
   body.sunny-theme {
