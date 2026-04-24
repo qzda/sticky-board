@@ -84,6 +84,13 @@
       padding-left: 1.5rem;
     }
 
+    pre {
+      background: rgba(128, 128, 128, 0.14);
+      padding: 0.5rem 0.65rem;
+      border-radius: 0.35rem;
+      overflow-x: auto;
+    }
+
     img {
       cursor: pointer;
       width: 100%;
