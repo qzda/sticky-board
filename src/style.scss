@@ -91,6 +91,12 @@
       overflow-x: auto;
     }
 
+    code:not(pre code) {
+      background: rgba(128, 128, 128, 0.14);
+      padding: 0.1rem 0.28rem;
+      border-radius: 0.25rem;
+    }
+
     img {
       cursor: pointer;
       width: 100%;
