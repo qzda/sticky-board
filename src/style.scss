@@ -79,7 +79,9 @@ body {
   //     100% calc(100% - var(--card-corner-size)),
   //     calc(100% - var(--card-corner-size)) 100%,
   //     0 100%);
-  box-shadow: 1rem 1rem 1rem rgba(128, 128, 128, 0.14);
+  box-shadow:
+    1rem 1rem 1rem rgba(128, 128, 128, 0.25),
+    -0.5rem -0.5rem 0.5rem rgba(128, 128, 128, 0.125);
   z-index: 1;
 
   // &::before {
