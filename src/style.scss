@@ -33,7 +33,7 @@
 }
 
 body {
-  &.move {
+  &.move * {
     user-select: none;
   }
 
@@ -44,7 +44,7 @@ body {
     #root {
       overflow: visible !important;
       min-height: 100dvh;
-      padding: 2.5rem 1rem 2rem 1rem;
+      padding: 1rem;
       background-image: none;
       background-size: initial;
       background-position: initial;
@@ -74,29 +74,26 @@ body {
   border-top: 1rem solid var(--bg-card);
   background-color: var(--bg-card);
   position: relative;
-  clip-path: polygon(0 0,
-      100% 0,
-      100% calc(100% - var(--card-corner-size)),
-      calc(100% - var(--card-corner-size)) 100%,
-      0 100%);
+  // clip-path: polygon(0 0,
+  //     100% 0,
+  //     100% calc(100% - var(--card-corner-size)),
+  //     calc(100% - var(--card-corner-size)) 100%,
+  //     0 100%);
+  box-shadow: 1rem 1rem 1rem rgba(128, 128, 128, 0.14);
   z-index: 1;
 
-  &::before {
-    content: "";
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    width: var(--card-corner-size);
-    height: var(--card-corner-size);
-    clip-path: polygon(0 100%, 0 0, 100% 0);
-    background: rgba(156, 156, 39, 0.2);
-    pointer-events: none;
-    z-index: 2;
-  }
-
-  &.move {
-    user-select: none;
-  }
+  // &::before {
+  //   content: "";
+  //   position: absolute;
+  //   right: 0;
+  //   bottom: 0;
+  //   width: var(--card-corner-size);
+  //   height: var(--card-corner-size);
+  //   clip-path: polygon(0 100%, 0 0, 100% 0);
+  //   background: rgba(156, 156, 39, 0.2);
+  //   pointer-events: none;
+  //   z-index: 2;
+  // }
 
   &.layout-docked {
     position: relative !important;
@@ -306,6 +303,13 @@ body {
   width: 100%;
   align-items: start;
 
+  .layout-timeline-hint {
+    font-size: 0.75rem;
+    opacity: 0.72;
+    line-height: 1.35;
+    margin-left: 0.2rem;
+  }
+
   .layout-day-group {
     width: 100%;
     display: grid;
@@ -332,11 +336,6 @@ body {
     align-items: flex-start;
   }
 }
-
-
-
-
-
 
 @keyframes settings-pop-in {
   from {
@@ -417,14 +416,6 @@ body {
       color: #f5f7fa;
       border-color: rgba(255, 255, 255, 0.52);
       box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-    }
-  }
-
-  .card {
-    box-shadow: none;
-
-    &::before {
-      background: yellow;
     }
   }
 

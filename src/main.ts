@@ -29,6 +29,7 @@ const texts = {
     layoutMode: "时间轴布局",
     exportLabel: "导出",
     importLabel: "导入",
+    timelineHint: "双击任意便签可退出时间线，并将该便签置顶后居中显示",
     defaultText:
       "## Hi naonao\n- 右键卡片进入编辑模式\n- 点击页面空白处预览\n- 按住顶部移动位置\n- 按住右下角移动调整大小\n- 支持粘贴图片（单张不超过 500KB）",
   },
@@ -43,6 +44,8 @@ const texts = {
     layoutMode: "Timeline layout",
     exportLabel: "Export",
     importLabel: "Import",
+    timelineHint:
+      "Double-click any note to exit timeline, then bring it to front and center it",
     defaultText:
       "## Hi naonao\n- Right-click a card to enter edit mode\n- Click on any empty area of the page to preview\n- Drag the top area to move the card\n- Drag the bottom-right corner to resize\n- Paste image is supported (up to 500KB each)",
   },
@@ -845,6 +848,14 @@ function createCard(
     e.stopPropagation();
     toggleEditMode(card, true);
   });
+  card.addEventListener("dblclick", (e) => {
+    if (!isLayoutMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setLayoutMode(false);
+    bringCardToFront(card);
+    moveCardToViewportCenter(card);
+  });
 
   card.appendChild(deleteBtn);
   card.appendChild(resizeBtn);
@@ -999,6 +1010,43 @@ document.body.addEventListener("click", (e) => {
 function getMaxZIndex(): number {
   const zIndexes = Object.values(stickys).map((s) => s.zIndex || 1);
   return zIndexes.length > 0 ? Math.max(...zIndexes) : 1;
+}
+
+/**
+ * Brings a card to the top z-index and persists that z-index.
+ * @param {HTMLElement} card Card element to elevate.
+ * @returns {void}
+ */
+function bringCardToFront(card: HTMLElement): void {
+  const maxZIndex = getMaxZIndex() + 1;
+  card.style.zIndex = `${maxZIndex}`;
+  card.setAttribute("data-zindex", `${maxZIndex}`);
+
+  const id = card.getAttribute("id");
+  if (id) {
+    save(id, { zIndex: maxZIndex });
+  }
+}
+
+/**
+ * Moves a card to the center of current viewport and snaps to 16px grid.
+ * @param {HTMLElement} card Card element to move.
+ * @returns {void}
+ */
+function moveCardToViewportCenter(card: HTMLElement): void {
+  const rect = card.getBoundingClientRect();
+  const rawX = window.scrollX + (window.innerWidth - rect.width) / 2;
+  const rawY = window.scrollY + (window.innerHeight - rect.height) / 2;
+  const x = Math.max(0, Math.round(rawX / 16) * 16);
+  const y = Math.max(0, Math.round(rawY / 16) * 16);
+
+  card.style.transform = `translate(${x}px, ${y}px)`;
+  card.setAttribute("data-xy", `${x},${y}`);
+
+  const id = card.getAttribute("id");
+  if (id) {
+    save(id, { x, y });
+  }
 }
 
 /**
@@ -1260,6 +1308,11 @@ function renderTimelineLayout(): void {
   if (!layoutPanel) return;
   layoutPanel.innerHTML = "";
 
+  const hint = document.createElement("div");
+  hint.className = "layout-timeline-hint";
+  hint.textContent = t.timelineHint;
+  layoutPanel.appendChild(hint);
+
   const entries = Object.keys(stickys).sort(
     (a, b) => getStickyTimestamp(b) - getStickyTimestamp(a),
   );
@@ -1305,6 +1358,7 @@ function setLayoutMode(enabled: boolean): void {
   ensureLayoutPanel();
   isLayoutMode = enabled;
   document.body.classList.toggle("layout-timeline", isLayoutMode);
+  document.documentElement.classList.toggle("layout-timeline", isLayoutMode);
   layoutIcon.classList.toggle("active", isLayoutMode);
 
   if (isLayoutMode) {
@@ -1450,16 +1504,7 @@ interact(".card")
         const target = event.target as HTMLElement;
         target.classList.add("move");
         document.body.classList.add("move");
-
-        // 设置为最大 zIndex
-        const maxZIndex = getMaxZIndex() + 1;
-        target.style.zIndex = `${maxZIndex}`;
-        target.setAttribute("data-zindex", `${maxZIndex}`);
-
-        const id = target.getAttribute("id");
-        if (id) {
-          save(id, { zIndex: maxZIndex });
-        }
+        bringCardToFront(target);
       },
 
       end(event) {
@@ -1510,16 +1555,7 @@ interact(".card")
         const target = event.target as HTMLElement;
         target.classList.add("move");
         document.body.classList.add("move");
-
-        // 设置为最大 zIndex
-        const maxZIndex = getMaxZIndex() + 1;
-        target.style.zIndex = `${maxZIndex}`;
-        target.setAttribute("data-zindex", `${maxZIndex}`);
-
-        const id = target.getAttribute("id");
-        if (id) {
-          save(id, { zIndex: maxZIndex });
-        }
+        bringCardToFront(target);
       },
 
       end(event) {
