@@ -58,15 +58,12 @@
       color-scheme: light dark;
       --bg: #ffffff;
       --color: #171717;
-      --color-card: #171717;
-      --bg-card: #ffffaa;
     }
 
     @media (prefers-color-scheme: dark) {
       :root {
         --bg: #4e4e4e;
         --color: #ffffff;
-        --bg-card: #ebeb54;
       }
     }
 
@@ -84,13 +81,8 @@
       color: var(--color);
     }
 
-    body.move {
-      user-select: none;
-    }
-
     #root {
       height: 100%;
-      overflow: hidden;
 
       /* 点阵背景 */
       background-image: radial-gradient(gray 1px, transparent 1px);

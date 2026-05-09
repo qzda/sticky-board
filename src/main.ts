@@ -2,6 +2,7 @@ import interact from "interactjs";
 import MarkdownIt from "markdown-it";
 
 import settings from "./assets/settings.svg?raw";
+import layout from "./assets/layout.svg?raw";
 import download from "./assets/download.svg?raw";
 import upload from "./assets/upload.svg?raw";
 import github from "./assets/github.svg?raw";
@@ -25,6 +26,7 @@ const texts = {
       `发现 ${importCount} 个便签：\n- ${existingIds} 个现有便签将被更新\n- ${newIds} 个新便签将被添加\n\n继续？`,
     parseFailed: "解析 JSON 文件失败",
     sunnyTheme: "Sunny",
+    layoutMode: "时间轴布局",
     exportLabel: "导出",
     importLabel: "导入",
     defaultText:
@@ -38,6 +40,7 @@ const texts = {
       `Found ${importCount} note(s):\n- ${existingIds} existing note(s) will be updated\n- ${newIds} new note(s) will be added\n\nContinue?`,
     parseFailed: "Failed to parse JSON file",
     sunnyTheme: "Sunny",
+    layoutMode: "Timeline layout",
     exportLabel: "Export",
     importLabel: "Import",
     defaultText:
@@ -88,6 +91,7 @@ type PersistRecord = {
 let stickys: Stickys = {};
 let imageStore: Record<string, Blob> = {};
 const imageUrlCache = new Map<string, string>();
+const cardElementMap = new Map<string, HTMLDivElement>();
 
 /**
  * Opens the IndexedDB database and creates stores on first run.
@@ -410,6 +414,7 @@ function save(id: string, data: Partial<Sticky>): void {
  */
 function deleteCard(id: string): void {
   delete stickys[id];
+  cardElementMap.delete(id);
   cleanupUnusedImages();
   void persistStickys().catch((error) => {
     console.error("[storage] failed to persist stickys", error);
@@ -753,6 +758,7 @@ function createCard(
   card.style.height = `${height}rem`;
   card.style.transform = `translate(${x}px, ${y}px)`;
   card.style.zIndex = `${zIndex}`;
+  cardElementMap.set(id, card);
 
   const resizeBtn = document.createElement("div");
   resizeBtn.className = "resize";
@@ -765,6 +771,9 @@ function createCard(
     if (confirm(t.deleteConfirm)) {
       deleteCard(id);
       card.remove();
+      if (isLayoutMode) {
+        renderTimelineLayout();
+      }
     }
   });
 
@@ -818,27 +827,14 @@ function createCard(
   preview.innerHTML = textToHtml(textarea.value);
   preview.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
-
-    // 如果点击的是链接，不切换模式
-    if (target.tagName === "A") {
-      return;
-    }
-
-    if (target.tagName === "IMG") {
-      e.stopPropagation();
-      const image = target as HTMLImageElement;
-      openImagePreview(image.currentSrc || image.src, image.alt);
-      return;
-    }
-
-    // 如果有选中文本，不切换模式
-    const selection = window.getSelection();
-    if (selection && selection.toString().length > 0) {
-      return;
-    }
+    if (target.tagName !== "IMG") return;
+    e.stopPropagation();
+    const image = target as HTMLImageElement;
+    openImagePreview(image.currentSrc || image.src, image.alt);
   });
 
   card.addEventListener("contextmenu", (e) => {
+    if (isLayoutMode) return;
     const target = e.target as HTMLElement;
     if (target.closest("button") || target.closest(".resize")) return;
 
@@ -877,18 +873,36 @@ let startX = 0;
 let startY = 0;
 let shadowDiv: HTMLDivElement | null = null;
 
+function setCreateSelectingLocked(locked: boolean): void {
+  const value = locked ? "none" : "";
+  document.body.style.userSelect = value;
+  document.documentElement.style.userSelect = value;
+}
+
+function finishCreateDragging(): void {
+  if (shadowDiv) {
+    grid.removeChild(shadowDiv);
+    shadowDiv = null;
+  }
+  isDraggingToCreate = false;
+  setCreateSelectingLocked(false);
+}
+
 // 监听鼠标按下事件，开始准备创建
 grid.addEventListener("mousedown", (e) => {
+  if (isLayoutMode) return;
   // 只在直接点击 grid 时创建，不在卡片上创建
   if (e.target === grid) {
     isDraggingToCreate = true;
     startX = e.clientX;
     startY = e.clientY;
+    setCreateSelectingLocked(true);
   }
 });
 
 // 监听鼠标移动事件，显示阴影
 grid.addEventListener("mousemove", (e) => {
+  if (isLayoutMode) return;
   if (isDraggingToCreate) {
     const deltaX = e.clientX - startX;
     const deltaY = e.clientY - startY;
@@ -927,6 +941,7 @@ grid.addEventListener("mousemove", (e) => {
 
 // 监听鼠标释放事件，创建卡片
 grid.addEventListener("mouseup", () => {
+  if (isLayoutMode) return;
   if (isDraggingToCreate) {
     // 只有在范围足够大时才创建卡片
     // 要求宽度和高度都至少达到 160px (10rem)
@@ -958,14 +973,14 @@ grid.addEventListener("mouseup", () => {
       // 如果过小，直接取消，不创建卡片
     }
 
-    // 清理阴影
-    if (shadowDiv) {
-      grid.removeChild(shadowDiv);
-      shadowDiv = null;
-    }
-
-    isDraggingToCreate = false;
+    finishCreateDragging();
   }
+});
+
+window.addEventListener("mouseup", () => {
+  if (isLayoutMode) return;
+  if (!isDraggingToCreate) return;
+  finishCreateDragging();
 });
 
 // 点击 body 空白处，切换所有卡片到预览模式
@@ -1045,6 +1060,11 @@ function createSvgElement(
 const settingsIcon = createSvgElement(settings, {
   alt: "settings",
 });
+const layoutIcon = createSvgElement(layout, {
+  alt: "layout",
+});
+layoutIcon.classList.add("settings-layout-btn");
+layoutIcon.setAttribute("title", t.layoutMode);
 
 /**
  * Creates an action button used in settings panel.
@@ -1109,6 +1129,7 @@ githubLink.appendChild(createSvgElement(github, { alt: "github" }));
 settingsContainer.appendChild(sunnyToggle);
 settingsContainer.appendChild(downloadAction);
 settingsContainer.appendChild(uploadAction);
+settingsContainer.appendChild(layoutIcon);
 settingsContainer.appendChild(settingsIcon);
 settingsContainer.appendChild(githubLink);
 
@@ -1117,6 +1138,9 @@ const settingsItems: HTMLElement[] = [sunnyToggle, downloadAction, uploadAction]
 const SETTINGS_ITEM_ANIMATION_STEP_MS = 45;
 const SETTINGS_ITEM_ANIMATION_DURATION_MS = 260;
 let settingsAnimationTimer: ReturnType<typeof setTimeout> | null = null;
+let isLayoutMode = false;
+let layoutPanel: HTMLDivElement | null = null;
+const dockedLayoutCardIds = new Set<string>();
 
 /**
  * Clears pending settings animation timer.
@@ -1176,9 +1200,129 @@ function setSettingsExpanded(expanded: boolean): void {
   });
 }
 
+/**
+ * Parses creation timestamp from sticky id.
+ * @param {string} id Sticky id.
+ * @returns {number} Unix timestamp in ms. Falls back to 0 when invalid.
+ */
+function getStickyTimestamp(id: string): number {
+  const firstSegment = id.split("-")[0];
+  const ts = Number(firstSegment);
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+/**
+ * Formats a timestamp into date key (YYYY-MM-DD).
+ * @param {number} timestamp Unix timestamp in ms.
+ * @returns {string} Date key.
+ */
+function getDateKey(timestamp: number): string {
+  const date = new Date(timestamp);
+  const y = date.getFullYear();
+  const m = `${date.getMonth() + 1}`.padStart(2, "0");
+  const d = `${date.getDate()}`.padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Ensures layout mode panel exists.
+ * @returns {void}
+ */
+function ensureLayoutPanel(): void {
+  if (layoutPanel) return;
+  layoutPanel = document.createElement("div");
+  layoutPanel.className = "layout-panel";
+  grid.appendChild(layoutPanel);
+}
+
+/**
+ * Restores all cards back to original grid absolute layout.
+ * @returns {void}
+ */
+function restoreFromLayoutMode(): void {
+  dockedLayoutCardIds.forEach((cardId) => {
+    const card = cardElementMap.get(cardId);
+    if (!card) return;
+    card.classList.remove("layout-docked");
+    if (card.parentElement !== grid) {
+      grid.appendChild(card);
+    }
+  });
+  dockedLayoutCardIds.clear();
+  if (layoutPanel) layoutPanel.innerHTML = "";
+}
+
+/**
+ * Renders timeline layout (newest day first, cards grouped by day).
+ * @returns {void}
+ */
+function renderTimelineLayout(): void {
+  if (!layoutPanel) return;
+  layoutPanel.innerHTML = "";
+
+  const entries = Object.keys(stickys).sort(
+    (a, b) => getStickyTimestamp(b) - getStickyTimestamp(a),
+  );
+  const grouped = new Map<string, string[]>();
+  entries.forEach((id) => {
+    const key = getDateKey(getStickyTimestamp(id));
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key)!.push(id);
+  });
+
+  grouped.forEach((ids, day) => {
+    const group = document.createElement("div");
+    group.className = "layout-day-group";
+
+    const marker = document.createElement("div");
+    marker.className = "layout-day-marker";
+    marker.textContent = day;
+
+    const row = document.createElement("div");
+    row.className = "layout-day-row";
+
+    ids.forEach((id) => {
+      const card = cardElementMap.get(id);
+      if (!card) return;
+      card.classList.add("layout-docked");
+      row.appendChild(card);
+      dockedLayoutCardIds.add(id);
+    });
+
+    group.appendChild(marker);
+    group.appendChild(row);
+    layoutPanel!.appendChild(group);
+  });
+}
+
+/**
+ * Toggles timeline layout mode on/off.
+ * @param {boolean} enabled Whether to enable layout mode.
+ * @returns {void}
+ */
+function setLayoutMode(enabled: boolean): void {
+  if (enabled === isLayoutMode) return;
+  ensureLayoutPanel();
+  isLayoutMode = enabled;
+  document.body.classList.toggle("layout-timeline", isLayoutMode);
+  layoutIcon.classList.toggle("active", isLayoutMode);
+
+  if (isLayoutMode) {
+    setSettingsExpanded(false);
+    renderTimelineLayout();
+    return;
+  }
+
+  restoreFromLayoutMode();
+}
+
 // 点击 settings 按钮展开/收起
 settingsIcon.addEventListener("click", () => {
   setSettingsExpanded(!isExpanded);
+});
+
+layoutIcon.addEventListener("click", () => {
+  setLayoutMode(!isLayoutMode);
 });
 
 // 导出功能
@@ -1302,6 +1446,7 @@ interact(".card")
 
     listeners: {
       start(event) {
+        if (isLayoutMode) return;
         const target = event.target as HTMLElement;
         target.classList.add("move");
         document.body.classList.add("move");
@@ -1318,12 +1463,14 @@ interact(".card")
       },
 
       end(event) {
+        if (isLayoutMode) return;
         const target = event.target as HTMLElement;
         target.classList.remove("move");
         document.body.classList.remove("move");
       },
 
       move(event) {
+        if (isLayoutMode) return;
         const target = event.target as HTMLElement;
 
         const width = (event.rect.width / 16) >> 0,
@@ -1359,6 +1506,7 @@ interact(".card")
 
     listeners: {
       start(event) {
+        if (isLayoutMode) return;
         const target = event.target as HTMLElement;
         target.classList.add("move");
         document.body.classList.add("move");
@@ -1375,6 +1523,7 @@ interact(".card")
       },
 
       end(event) {
+        if (isLayoutMode) return;
         const target = event.target as HTMLElement;
         target.classList.remove("move");
         document.body.classList.remove("move");
@@ -1394,6 +1543,7 @@ interact(".card")
       },
 
       move(event) {
+        if (isLayoutMode) return;
         const target = event.target as HTMLElement;
         let [x, y] = (target.getAttribute("data-xy") || "0,0")
           .split(",")
