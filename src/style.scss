@@ -65,8 +65,6 @@ body {
 .card {
   --card-corner-size: 1rem;
 
-  width: 20rem;
-  height: 10rem;
   min-width: 10rem;
   min-height: 10rem;
   max-width: 50rem;
@@ -101,8 +99,7 @@ body {
     position: relative !important;
     transform: none !important;
     z-index: 1 !important;
-    width: min(18rem, calc(100vw - 15rem)) !important;
-    height: 11rem !important;
+    max-height: 20rem;
     flex: 0 0 auto;
     cursor: default !important;
 

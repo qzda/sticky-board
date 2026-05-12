@@ -1105,14 +1105,14 @@ function createSvgElement(
 
   return svg as SVGElement;
 }
-const settingsIcon = createSvgElement(settings, {
-  alt: "settings",
-});
 const layoutIcon = createSvgElement(layout, {
   alt: "layout",
 });
 layoutIcon.classList.add("settings-layout-btn");
 layoutIcon.setAttribute("title", t.layoutMode);
+const settingsIcon = createSvgElement(settings, {
+  alt: "settings",
+});
 
 /**
  * Creates an action button used in settings panel.
@@ -1177,8 +1177,8 @@ githubLink.appendChild(createSvgElement(github, { alt: "github" }));
 settingsContainer.appendChild(sunnyToggle);
 settingsContainer.appendChild(downloadAction);
 settingsContainer.appendChild(uploadAction);
-settingsContainer.appendChild(layoutIcon);
 settingsContainer.appendChild(settingsIcon);
+settingsContainer.appendChild(layoutIcon);
 settingsContainer.appendChild(githubLink);
 
 let isExpanded = false;
