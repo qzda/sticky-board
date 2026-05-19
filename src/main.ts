@@ -848,6 +848,10 @@ function createCard(
     e.stopPropagation();
     toggleEditMode(card, true);
   });
+  card.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).closest("button")) return;
+    bringCardToFront(card);
+  });
   card.addEventListener("dblclick", (e) => {
     if (!isLayoutMode) return;
     e.preventDefault();
@@ -997,6 +1001,23 @@ window.addEventListener("mouseup", () => {
 // 点击 body 空白处，切换所有卡片到预览模式
 document.body.addEventListener("click", (e) => {
   const target = e.target as HTMLElement;
+  const selection = window.getSelection();
+  const hasTextSelection = Boolean(selection && selection.toString().length > 0);
+  if (hasTextSelection && selection) {
+    const anchorNode = selection.anchorNode;
+    const selectedCard = anchorNode
+      ? (anchorNode instanceof Element
+        ? anchorNode
+        : anchorNode.parentElement
+      )?.closest(".card")
+      : null;
+    const clickedCard = target.closest(".card");
+    const shouldClearSelection = !clickedCard || clickedCard !== selectedCard;
+    if (shouldClearSelection) {
+      selection.removeAllRanges();
+    }
+  }
+
   // 如果点击的是 grid 或 body，切换所有卡片到预览模式
   if (target === grid || target === document.body) {
     toggleAllToPreview();
