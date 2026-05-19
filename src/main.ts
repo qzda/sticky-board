@@ -79,7 +79,6 @@ const IMAGES_STORAGE_KEY = "stickyImages";
 const IMAGE_SRC_PREFIX = "sticky-image://";
 const IMAGE_KEY_PATTERN = /!\[[^\]]*]\(sticky-image:\/\/([a-zA-Z0-9_-]+)\)/g;
 const SUNNY_THEME_STORAGE_KEY = "sunnyThemeEnabled";
-const CLEANUP_DEBOUNCE_MS = 800;
 const DB_NAME = "sticky-board-db";
 const DB_VERSION = 1;
 const DB_STORE = "app-state";
@@ -402,9 +401,6 @@ function save(id: string, data: Partial<Sticky>): void {
     ...stickys[id],
     ...data,
   };
-  if (data.text !== undefined) {
-    scheduleCleanupUnusedImages();
-  }
   void persistStickys().catch((error) => {
     console.error("[storage] failed to persist stickys", error);
   });
@@ -425,7 +421,6 @@ function deleteCard(id: string): void {
 }
 
 const MAX_PASTED_IMAGE_SIZE = 20 * 1024 * 1024;
-let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Schedules image store persistence.
@@ -495,21 +490,6 @@ function cleanupUnusedImages(): void {
   if (changed) {
     saveImageStore();
   }
-}
-
-/**
- * Debounces image cleanup during text edits.
- * @returns {void}
- */
-function scheduleCleanupUnusedImages(): void {
-  if (cleanupTimer) {
-    clearTimeout(cleanupTimer);
-  }
-
-  cleanupTimer = setTimeout(() => {
-    cleanupUnusedImages();
-    cleanupTimer = null;
-  }, CLEANUP_DEBOUNCE_MS);
 }
 
 /**
@@ -1021,6 +1001,7 @@ document.body.addEventListener("click", (e) => {
   // 如果点击的是 grid 或 body，切换所有卡片到预览模式
   if (target === grid || target === document.body) {
     toggleAllToPreview();
+    cleanupUnusedImages();
   }
 });
 
