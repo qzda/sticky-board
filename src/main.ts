@@ -1,5 +1,6 @@
 import interact from "interactjs";
 import MarkdownIt from "markdown-it";
+import JSZip from "jszip";
 
 import settings from "./assets/settings.svg?raw";
 import layout from "./assets/layout.svg?raw";
@@ -61,7 +62,6 @@ type Sticky = {
   width: number;
   height: number;
   zIndex: number;
-
   text: string;
 };
 
@@ -75,9 +75,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 const defaultText = t.defaultText;
-const IMAGES_STORAGE_KEY = "stickyImages";
 const IMAGE_SRC_PREFIX = "sticky-image://";
 const IMAGE_KEY_PATTERN = /!\[[^\]]*]\(sticky-image:\/\/([a-zA-Z0-9_-]+)\)/g;
+const MARKDOWN_IMAGE_PATTERN = /!\[([^\]]*)\]\(([^)]+)\)/g;
 const SUNNY_THEME_STORAGE_KEY = "sunnyThemeEnabled";
 const DB_NAME = "sticky-board-db";
 const DB_VERSION = 1;
@@ -89,6 +89,9 @@ type PersistRecord = {
   key: string;
   value: unknown;
 };
+
+type StickyConfigEntry = Omit<Sticky, "text"> & { path: string };
+type StickyConfigMap = Record<string, StickyConfigEntry>;
 
 let stickys: Stickys = {};
 let imageStore: Record<string, Blob> = {};
@@ -223,20 +226,6 @@ function dataUrlToBlob(dataUrl: string): Blob {
 }
 
 /**
- * Converts a Blob to data URL string.
- * @param {Blob} blob Blob to encode.
- * @returns {Promise<string>} Encoded data URL.
- */
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
-}
-
-/**
  * Normalizes heterogeneous image map values into Blob values.
  * @param {Record<string, unknown>} source Raw image map.
  * @returns {Promise<Record<string, Blob>>} Normalized image map.
@@ -293,85 +282,6 @@ async function requestPersistentStorage(): Promise<void> {
   } catch (error) {
     console.warn("[storage] persistent storage request failed", error);
   }
-}
-
-/**
- * Migrates legacy localStorage data into IndexedDB and removes old keys.
- * Keeps settings keys in localStorage.
- * @returns {Promise<void>}
- */
-async function migrateLocalStorageToIndexedDb(): Promise<void> {
-  const localStickysRaw = localStorage.getItem(DB_KEY_STICKYS);
-  const localImagesRaw = localStorage.getItem(IMAGES_STORAGE_KEY);
-  const hasLocalData = localStickysRaw !== null || localImagesRaw !== null;
-
-  if (!hasLocalData) {
-    console.log("[storage] no localStorage data to migrate");
-    return;
-  }
-
-  console.log("[storage] localStorage migration started");
-
-  let migratedStickys: Stickys | null = null;
-  let migratedImages: Record<string, Blob> | null = null;
-
-  if (localStickysRaw !== null) {
-    try {
-      const parsed = JSON.parse(localStickysRaw);
-      if (isRecord(parsed)) {
-        migratedStickys = parsed as Stickys;
-        console.log(
-          `[storage] found local stickys: ${Object.keys(migratedStickys).length}`,
-        );
-      } else {
-        console.warn("[storage] local stickys format invalid, skipped");
-      }
-    } catch (error) {
-      console.warn("[storage] local stickys parse failed, skipped", error);
-    }
-  }
-
-  if (localImagesRaw !== null) {
-    try {
-      const parsed = JSON.parse(localImagesRaw);
-      if (isRecord(parsed)) {
-        migratedImages = await normalizeImageMap(parsed);
-        console.log(
-          `[storage] found local images: ${Object.keys(migratedImages).length}`,
-        );
-      } else {
-        console.warn("[storage] local images format invalid, skipped");
-      }
-    } catch (error) {
-      console.warn("[storage] local images parse failed, skipped", error);
-    }
-  }
-
-  const existingStickys = (await readPersistedValue<Stickys>(DB_KEY_STICKYS)) || {};
-  const existingImagesRaw =
-    (await readPersistedValue<Record<string, unknown>>(DB_KEY_IMAGES)) || {};
-  const existingImages = isRecord(existingImagesRaw)
-    ? await normalizeImageMap(existingImagesRaw)
-    : {};
-
-  const finalStickys = migratedStickys
-    ? { ...existingStickys, ...migratedStickys }
-    : existingStickys;
-  const finalImages = migratedImages
-    ? { ...existingImages, ...migratedImages }
-    : existingImages;
-
-  await writePersistedValue(DB_KEY_STICKYS, finalStickys);
-  await writePersistedValue(DB_KEY_IMAGES, finalImages);
-  localStorage.removeItem(DB_KEY_STICKYS);
-  localStorage.removeItem(IMAGES_STORAGE_KEY);
-
-  console.log(
-    `[storage] migration completed (stickys: ${Object.keys(finalStickys).length}, images: ${Object.keys(finalImages).length})`,
-  );
-  console.log(
-    `[storage] localStorage cleaned, kept keys: ${SUNNY_THEME_STORAGE_KEY}`,
-  );
 }
 
 /**
@@ -440,6 +350,101 @@ function saveImageStore(): void {
 function createImageKey(stickyId: string): string {
   const imageId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   return `${stickyId}-${imageId}`;
+}
+
+/**
+ * Normalizes zip-relative paths for stable matching.
+ * @param {string} path Raw path.
+ * @returns {string} Normalized relative path without leading ./ or /.
+ */
+function normalizeZipPath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/^\.?\//, "");
+}
+
+/**
+ * Returns a file extension guess for a blob MIME type.
+ * @param {Blob} blob Image blob.
+ * @returns {string} File extension without dot.
+ */
+function getBlobExtension(blob: Blob): string {
+  const mime = blob.type.toLowerCase();
+  if (mime === "image/jpeg") return "jpg";
+  if (mime === "image/png") return "png";
+  if (mime === "image/webp") return "webp";
+  if (mime === "image/gif") return "gif";
+  if (mime === "image/svg+xml") return "svg";
+  if (mime === "image/bmp") return "bmp";
+  if (mime === "image/avif") return "avif";
+  return "bin";
+}
+
+/**
+ * Rewrites sticky-image links to relative image paths for zip export.
+ * @param {string} text Markdown text.
+ * @param {Record<string, string>} imagePathByKey Image path map by key.
+ * @returns {string} Rewritten markdown.
+ */
+function toZipMarkdown(
+  text: string,
+  imagePathByKey: Record<string, string>,
+): string {
+  return text.replace(MARKDOWN_IMAGE_PATTERN, (full, alt, rawPath) => {
+    const path = String(rawPath).trim();
+    if (!path.startsWith(IMAGE_SRC_PREFIX)) return full;
+    const imageKey = path.slice(IMAGE_SRC_PREFIX.length);
+    const mapped = imagePathByKey[imageKey];
+    if (!mapped) return full;
+    return `![${alt}](${mapped})`;
+  });
+}
+
+/**
+ * Rewrites relative markdown image paths from zip into sticky-image links.
+ * If image file is not found in zip, keeps original path unchanged.
+ * @param {string} text Markdown text.
+ * @param {string} mdPath Markdown file path in zip.
+ * @param {JSZip} zip Zip archive.
+ * @param {string} stickyId Sticky id for generated image keys.
+ * @returns {Promise<{ text: string; images: Record<string, Blob> }>} Rewritten text and imported images.
+ */
+async function fromZipMarkdown(
+  text: string,
+  mdPath: string,
+  zip: JSZip,
+  stickyId: string,
+): Promise<{ text: string; images: Record<string, Blob> }> {
+  const importedImages: Record<string, Blob> = {};
+  const mdDir = normalizeZipPath(mdPath).split("/").slice(0, -1).join("/");
+  let rewritten = text;
+  let localSeq = 0;
+  const matches = [...text.matchAll(MARKDOWN_IMAGE_PATTERN)];
+  for (const match of matches) {
+    const full = match[0];
+    const alt = match[1];
+    const rawPath = match[2].trim();
+    if (
+      rawPath.startsWith("http://") ||
+      rawPath.startsWith("https://") ||
+      rawPath.startsWith("data:") ||
+      rawPath.startsWith(IMAGE_SRC_PREFIX)
+    ) {
+      continue;
+    }
+
+    const combined = mdDir ? `${mdDir}/${rawPath}` : rawPath;
+    const resolvedPath = normalizeZipPath(combined);
+    const zipFile = zip.file(resolvedPath);
+    if (!zipFile) continue;
+
+    const imageBlob = await zipFile.async("blob");
+    const imageKey = `${createImageKey(stickyId)}-${localSeq++}`;
+    importedImages[imageKey] = imageBlob;
+    rewritten = rewritten.replace(full, `![${alt}](${IMAGE_SRC_PREFIX}${imageKey})`);
+  }
+  return {
+    text: rewritten,
+    images: importedImages,
+  };
 }
 
 /**
@@ -1015,6 +1020,26 @@ function getMaxZIndex(): number {
 }
 
 /**
+ * Returns a default sticky layout config with slight offset.
+ * @param {number} index Zero-based index.
+ * @param {number} baseZIndex Base z-index.
+ * @returns {Omit<Sticky, "text">} Default sticky layout config.
+ */
+function getDefaultStickyLayout(
+  index: number,
+  baseZIndex: number,
+): Omit<Sticky, "text"> {
+  const offset = (index + 1) * 10;
+  return {
+    x: offset,
+    y: offset,
+    width: 20,
+    height: 10,
+    zIndex: baseZIndex + index + 1,
+  };
+}
+
+/**
  * Brings a card to the top z-index and persists that z-index.
  * @param {HTMLElement} card Card element to elevate.
  * @returns {void}
@@ -1058,7 +1083,6 @@ function moveCardToViewportCenter(card: HTMLElement): void {
 async function initializeState(): Promise<void> {
   try {
     await requestPersistentStorage();
-    await migrateLocalStorageToIndexedDb();
     await loadStateFromIndexedDb();
     cleanupUnusedImages();
     Object.entries(stickys).forEach(([id, data]) => {
@@ -1385,18 +1409,37 @@ layoutIcon.addEventListener("click", () => {
 downloadAction.addEventListener("click", async () => {
   setSettingsExpanded(false);
   try {
-    const stickyImages: Record<string, string> = {};
-    for (const [key, blob] of Object.entries(imageStore)) {
-      stickyImages[key] = await blobToDataUrl(blob);
+    const zip = new JSZip();
+    const imagesFolder = zip.folder("images");
+    if (!imagesFolder) {
+      throw new Error("Failed to create images folder in zip");
     }
-    const exportData = JSON.stringify({
-      stickys,
-      stickyImages,
-    });
-    const timestamp = Date.now();
-    const filename = `stickys-${timestamp}.json`;
 
-    const blob = new Blob([exportData], { type: "application/json" });
+    const imagePathByKey: Record<string, string> = {};
+    Object.entries(imageStore).forEach(([imageKey, blob]) => {
+      const ext = getBlobExtension(blob);
+      const imagePath = `images/${imageKey}.${ext}`;
+      imagePathByKey[imageKey] = `./${imagePath}`;
+      imagesFolder.file(`${imageKey}.${ext}`, blob);
+    });
+
+    const config: StickyConfigMap = {};
+    Object.entries(stickys).forEach(([id, sticky]) => {
+      const mdPath = `./${id}.md`;
+      const markdown = toZipMarkdown(sticky.text || "", imagePathByKey);
+      zip.file(`${id}.md`, markdown);
+      const { text: _text, ...stickyLayout } = sticky;
+      config[id] = {
+        ...stickyLayout,
+        path: mdPath,
+      };
+    });
+
+    zip.file("sticky-board-config.json", JSON.stringify(config, null, 2));
+
+    const timestamp = Date.now();
+    const filename = `sticky-board-${timestamp}.zip`;
+    const blob = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -1413,57 +1456,111 @@ uploadAction.addEventListener("click", () => {
   setSettingsExpanded(false);
   const input = document.createElement("input");
   input.type = "file";
-  input.accept = ".json";
+  input.accept = ".zip";
 
   input.addEventListener("change", (e) => {
     const file = (e.target as HTMLInputElement).files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
+    void (async () => {
       try {
-        const content = event.target?.result as string;
-        const importedData = JSON.parse(content);
-
-        // 验证数据格式
-        if (!isRecord(importedData)) {
+        const zip = await JSZip.loadAsync(file);
+        const mdFiles = zip
+          .file(/\.md$/i)
+          .filter((entry) => !entry.dir);
+        if (mdFiles.length === 0) {
           alert(t.invalidFormat);
           return;
         }
 
-        let importedStickys: Stickys;
-        let importedImages: Record<string, Blob> = {};
-
-        // 兼容两种导入格式：
-        // 1) 旧格式：直接是 stickys
-        // 2) 新格式：{ stickys, stickyImages }
-        if ("stickys" in importedData) {
-          const maybeStickys = importedData.stickys;
-          if (!isRecord(maybeStickys)) {
-            alert(t.invalidFormat);
-            return;
+        let configById: StickyConfigMap = {};
+        const configFile = zip.file("sticky-board-config.json");
+        if (configFile) {
+          try {
+            const configText = await configFile.async("text");
+            const parsed = JSON.parse(configText);
+            if (isRecord(parsed)) {
+              configById = parsed as StickyConfigMap;
+            }
+          } catch (error) {
+            console.warn("[import] failed to parse sticky-board-config.json", error);
           }
-          importedStickys = maybeStickys as Stickys;
-
-          const maybeImages = importedData.stickyImages;
-          if (isRecord(maybeImages)) {
-            importedImages = await normalizeImageMap(maybeImages);
-          }
-        } else {
-          importedStickys = importedData as Stickys;
         }
 
-        // 合并数据：相同 id 则修改，不同 id 则新增
+        const configPathToId = new Map<string, string>();
+        Object.entries(configById).forEach(([id, cfg]) => {
+          if (!cfg || typeof cfg.path !== "string") return;
+          configPathToId.set(normalizeZipPath(cfg.path), id);
+        });
+
+        const baseTimestamp = Date.now();
+        const usedIds = new Set<string>([
+          ...Object.keys(stickys),
+          ...Object.keys(configById),
+        ]);
+        let generatedIdCount = 0;
+        const nextGeneratedId = (): string => {
+          while (true) {
+            const candidate = `${baseTimestamp + generatedIdCount * 100}`;
+            generatedIdCount += 1;
+            if (!usedIds.has(candidate)) {
+              usedIds.add(candidate);
+              return candidate;
+            }
+          }
+        };
+
+        const importedStickys: Stickys = {};
+        const importedImages: Record<string, Blob> = {};
+        const baseZIndex = getMaxZIndex();
+        let defaultLayoutIndex = 0;
+
+        for (const mdFile of mdFiles) {
+          const mdZipPath = normalizeZipPath(mdFile.name);
+          const rawMarkdown = await mdFile.async("text");
+
+          let id = configPathToId.get(mdZipPath);
+          if (!id) {
+            const withDotSlash = `./${mdZipPath}`;
+            id = configPathToId.get(withDotSlash);
+          }
+          if (!id) {
+            id = nextGeneratedId();
+          } else {
+            usedIds.add(id);
+          }
+
+          const converted = await fromZipMarkdown(rawMarkdown, mdZipPath, zip, id);
+          Object.assign(importedImages, converted.images);
+
+          const cfg = configById[id];
+          const defaultLayout = getDefaultStickyLayout(defaultLayoutIndex, baseZIndex);
+          const layout = cfg
+            ? {
+              x: Number(cfg.x) || defaultLayout.x,
+              y: Number(cfg.y) || defaultLayout.y,
+              width: Number(cfg.width) || defaultLayout.width,
+              height: Number(cfg.height) || defaultLayout.height,
+              zIndex: Number(cfg.zIndex) || defaultLayout.zIndex,
+            }
+            : defaultLayout;
+          if (!cfg) {
+            defaultLayoutIndex += 1;
+          }
+
+          importedStickys[id] = {
+            ...layout,
+            text: converted.text,
+          };
+        }
+
         const mergedStickys = { ...stickys, ...importedStickys };
         const mergedImages = { ...imageStore, ...importedImages };
-
-        // 确认导入
         const importCount = Object.keys(importedStickys).length;
         const existingIds = Object.keys(stickys).filter(
           (id) => id in importedStickys,
         ).length;
         const newIds = importCount - existingIds;
-
         const message = t.importConfirm(importCount, existingIds, newIds);
 
         if (confirm(message)) {
@@ -1471,19 +1568,15 @@ uploadAction.addEventListener("click", () => {
           stickys = mergedStickys;
           imageStore = mergedImages;
           cleanupUnusedImages();
-          void persistStickys().catch((error) => {
-            console.error("[storage] failed to persist imported stickys", error);
-          });
-          saveImageStore();
-          // 刷新页面以加载新数据
+          await persistStickys();
+          await persistImageStore();
           location.reload();
         }
       } catch (error) {
         alert(t.parseFailed);
         console.error(error);
       }
-    };
-    reader.readAsText(file);
+    })();
   });
 
   input.click();

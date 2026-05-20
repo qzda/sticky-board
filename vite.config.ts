@@ -6,7 +6,11 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          dependencies: ["interactjs", "markdown-it"],
+          dependencies: [
+            "interactjs",
+            "markdown-it",
+            "jszip",
+          ],
         },
       },
     },
