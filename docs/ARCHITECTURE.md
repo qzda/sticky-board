@@ -1,266 +1,318 @@
 # Sticky Board Architecture
 
-This document describes the app in implementation detail so an AI/codegen system can rebuild it from scratch in one pass.
+This document reflects the current implementation in `src/main.ts` and `src/style.scss`.
+It is written so an engineer (or AI) can rebuild the app behavior with minimal ambiguity.
 
-## 1. Product Scope
+## 1. System Overview
 
-Sticky Board is a single-page web app for draggable/resizable markdown cards.
+Sticky Board is a browser-only sticky-note app with:
 
-Core capabilities:
+- Markdown notes (edit + preview)
+- Drag/resize interactions (grid-snapped)
+- Pasted image support (Blob storage)
+- IndexedDB persistence for notes/images
+- ZIP import/export (`.md + images + sticky-board-config.json`)
+- Timeline layout mode
+- Optional Sunny visual theme (video overlay)
 
-- Create cards by drag-selecting empty canvas area.
-- Edit card content in textarea, preview as markdown.
-- Store card positions/sizes/z-index/text locally.
-- Paste images into markdown with size limit; render images from local storage.
-- Import/export JSON including cards and pasted images.
-- Optional Sunny theme overlay (video), persisted as a setting.
-- Multi-language UI (Chinese/English) by browser locale.
+No backend, no user account, no remote sync.
 
-No backend, no account, no sync.
+## 2. Runtime Architecture
 
-## 2. Tech Stack
+```mermaid
+flowchart LR
+  UI[DOM / Events] --> CORE[src/main.ts]
+  CORE --> MD[markdown-it renderer]
+  CORE --> IJS[interactjs drag/resize]
+  CORE --> DB[(IndexedDB: app-state)]
+  CORE --> LS[localStorage: sunnyThemeEnabled]
+  CORE --> ZIP[JSZip import/export]
+  CORE --> CSS[src/style.scss]
+```
 
-- Runtime: browser only.
-- Build: Vite + TypeScript.
-- Interaction: `interactjs` (drag + resize + grid snap + bounds).
-- Markdown rendering: `markdown-it`.
-- Storage:
-  - App data: IndexedDB (`sticky-board-db`).
-  - Config only: localStorage (`sunnyThemeEnabled`).
-
-## 3. Project File Map
-
-- `index.html`:
-  - Base layout containers (`#root`, `#settings`).
-  - Global CSS variables.
-  - Script that sets `<html lang>` to `zh` or `en`.
-- `src/main.ts`:
-  - Entire app logic (state, storage, rendering, events, import/export, theme).
-- `src/style.css`:
-  - Card styles, settings UI, sunny overlay, preview modal.
-- `src/assets/*`:
-  - SVG icons and `leaves.mp4`.
-
-## 4. Data Model
+## 3. Data Model
 
 ```ts
 type Sticky = {
   x: number;
   y: number;
-  width: number;  // rem units
-  height: number; // rem units
+  width: number;   // rem
+  height: number;  // rem
   zIndex: number;
-  text: string;   // markdown source
+  text: string;    // markdown source
 };
 
 type Stickys = Record<string, Sticky>;
 ```
 
-Image model:
+In-memory stores:
 
-- Markdown stores image references as:
-  - `![alt](sticky-image://<imageKey>)`
-- In-memory/image persistence store:
-  - `Record<string, Blob>`
-- Image key format:
-  - `[stickyID]-[imageID]`
+- `stickys: Stickys`
+- `imageStore: Record<string, Blob>`
+- `imageUrlCache: Map<string, string>` (Object URL cache for rendering)
+- `cardElementMap: Map<string, HTMLDivElement>`
 
-## 5. Persistence Architecture
+Image reference format in markdown:
 
-### 5.1 IndexedDB Schema
+- `![alt](sticky-image://<imageKey>)`
 
-- DB name: `sticky-board-db`
+Image key convention:
+
+- `[stickyID]-[imageID]`
+
+## 4. Persistence Model
+
+### 4.1 IndexedDB
+
+- DB: `sticky-board-db`
 - Version: `1`
-- Object store: `app-state` (`keyPath: "key"`)
-- Keys used:
+- Store: `app-state` (`keyPath: key`)
+- Keys:
   - `stickys`
   - `stickyImages`
 
-Stored values:
+Persisted values:
 
-- `stickys` -> `Stickys`
-- `stickyImages` -> `Record<string, Blob>`
+- `stickys` => `Stickys`
+- `stickyImages` => `Record<string, Blob>`
 
-### 5.2 localStorage Policy
+### 4.2 localStorage
 
-Allowed key:
+Only setting key is stored in localStorage:
 
-- `sunnyThemeEnabled` only.
+- `sunnyThemeEnabled`
 
-Removed keys after migration:
+No localStorage->IndexedDB migration remains in current code.
 
-- `stickys`
-- `stickyImages`
+## 5. Startup Sequence
 
-### 5.3 Startup Migration Flow
+```mermaid
+sequenceDiagram
+  participant App
+  participant Storage as navigator.storage
+  participant IDB as IndexedDB
+  participant DOM
 
-On app init:
+  App->>Storage: persist() (best effort)
+  App->>IDB: read stickys + stickyImages
+  App->>App: normalize image map to Blob map
+  App->>App: cleanupUnusedImages()
+  loop each sticky
+    App->>DOM: createCard(...)
+  end
+```
 
-1. Request persistent storage via `navigator.storage.persist()`.
-2. Read localStorage legacy keys if present.
-3. Parse and normalize:
-   - `stickys`: object check.
-   - `stickyImages`: convert base64 data URL strings to Blob.
-4. Merge with existing IndexedDB data (local values override on same key).
-5. Write merged values to IndexedDB.
-6. Remove legacy localStorage data keys.
-7. Log migration status to console.
-
-Console log contract:
-
-- Start/no-op/completed/error cases are all logged with `[storage]` prefix.
+Key function: `initializeState()`.
 
 ## 6. Rendering Pipeline
 
-## 6.1 Markdown
+### 6.1 Markdown Rendering
 
-- `markdown-it` options:
-  - `html: true`
-  - `linkify: true`
-  - `breaks: true`
-- Link renderer override:
-  - Force `target="_blank"` and `rel="noopener noreferrer"`.
-- Image renderer override:
-  - Detect `sticky-image://` URI.
-  - Resolve key to Blob.
-  - Convert Blob to object URL for `<img src>`.
-  - Add `data-image-key` for diagnostics.
+Engine: `markdown-it` with:
 
-## 6.2 Card View Modes
+- `html: true`
+- `linkify: true`
+- `breaks: true`
 
-- Edit mode: textarea visible, preview hidden.
-- Preview mode: textarea hidden, preview HTML regenerated from markdown.
-- Global click on canvas/body exits edit mode for all cards.
+Custom rules:
 
-## 6.3 Image Preview Modal
+- Link rule: forces `target="_blank"` + `rel="noopener noreferrer"`
+- Image rule:
+  - If src starts with `sticky-image://`, lookup `imageStore[key]`
+  - Convert Blob -> Object URL (cached)
+  - If missing image, fallback alt to `[missing image]`
 
-- Clicking image in preview opens full-screen modal.
-- Modal closes on background click or Escape.
+### 6.2 Card Modes
+
+- Edit mode: `textarea` visible
+- Preview mode: `.preview` visible (HTML from markdown)
+
+Global click behavior:
+
+- Click blank area (`#root` / `body`) => all cards switch to preview
+- On that same blank click, run `cleanupUnusedImages()`
+
+### 6.3 Image Fullscreen Preview
+
+- Clicking image inside preview opens modal overlay
+- Close by background click or `Escape`
 
 ## 7. Interaction Model
 
-## 7.1 Card Creation
+### 7.1 Create Card by Dragging Empty Canvas
 
-- Mousedown on root canvas starts draw state.
-- Mousemove renders temporary shadow rectangle.
-- Mouseup creates card if width/height >= 160px each.
-- Size converts px -> rem by floor division (`/16`).
+- `mousedown` on `#root` starts draw mode (only if target is root itself)
+- `mousemove` shows dashed shadow box
+- `mouseup` creates card if >= `160px x 160px`
+- Dimensions are converted to rem via `/16`
+- During creation drag, `user-select` is disabled globally to prevent text selection artifacts
 
-## 7.2 Card Move/Resize
+### 7.2 Move/Resize Cards
 
-- `interactjs` resizable:
-  - Handle: `.resize`.
-  - Restrict edges to parent.
-- `interactjs` draggable:
-  - Ignore `textarea, .preview`.
-  - Snap to 16px grid.
-  - Restrict to root bounds.
-- On drag/resize start:
-  - Bring card to front (`max z-index + 1`).
-- On move/end:
-  - Persist x/y/width/height.
+Using `interactjs`:
 
-## 7.3 Enter Edit Mode
+- Resize handle: `.resize`
+- Restrict edges to parent
+- Drag snap: `16px` grid
+- Drag restriction: within `#root`
+- On drag/resize start: `bringCardToFront()`
+- On move/end: persist geometry (`x/y/width/height`)
 
-- Right-click (`contextmenu`) on card enters edit mode.
-- Right-click on delete button / resize handle is ignored.
+### 7.3 Edit Entry
 
-## 8. Image Handling
+- Right-click card enters edit mode (except delete button/resize handle)
+- Left click card brings it to top z-index
 
-Paste flow:
+## 8. Timeline Layout Mode
 
-1. Intercept `paste` on textarea.
-2. Extract first clipboard `image/*` item.
-3. Reject if image size exceeds configured limit.
-4. Create image key `[stickyId]-[imageId]`.
-5. Store Blob in image store and persist.
-6. Insert markdown image reference using `sticky-image://<key>`.
-7. Persist card text.
+Toggle source: layout button in settings.
 
-Unused image cleanup:
+When enabled (`layout-timeline` class):
 
-- Parse all card markdown for referenced image keys.
-- Remove unreferenced image blobs.
-- Revoke object URL cache entries.
-- Persist image store if changed.
-- Text edits use debounce for cleanup scheduling.
+- Cards are grouped by day from ID timestamp prefix
+- Ordered newest-first
+- Timeline panel renders `date marker + card row`
+- Cards become `layout-docked` and arranged in flow layout
+- Root background dot pattern is removed
+- Timeline hint text is shown at top
 
-## 9. Settings Panel
+Special interaction in timeline mode:
 
-Panel items:
+- Double-click any card:
+  - exit timeline mode
+  - bring that card to top
+  - move it to viewport center (snapped to 16px grid)
 
-- Sunny toggle.
-- Export action.
-- Import action.
-- Gear icon expands/collapses list.
+## 9. Image Lifecycle
 
-Animation behavior:
+### 9.1 Paste
 
-- Items appear from right-to-left with opacity fade.
-- Bottom item appears first.
-- Collapse has reverse animation before display is removed.
+Inside textarea `paste` handler:
 
-Sunny setting persistence:
+1. Extract first `image/*` clipboard item
+2. Enforce size limit (`MAX_PASTED_IMAGE_SIZE = 20MB`)
+3. Create image key and save Blob to `imageStore`
+4. Persist image store
+5. Insert markdown `![pasted-image](sticky-image://<key>)`
+6. Persist sticky text
 
-- Stored in localStorage key `sunnyThemeEnabled`.
+### 9.2 Cleanup Strategy
 
-## 10. Sunny Theme
+`cleanupUnusedImages()` parses all markdown text for `sticky-image://` keys.
 
-- Full-screen video overlay (`leaves.mp4`).
-- Video starts only when theme enabled and document visible.
-- Pauses when tab hidden.
-- Uses `mix-blend-mode` and CSS filters for shadow look.
-- Hidden when `prefers-reduced-motion: reduce`.
+- Unreferenced image keys are deleted from `imageStore`
+- Corresponding object URLs are revoked
+- Image store is persisted if changed
 
-## 11. Import / Export Contract
+Cleanup is intentionally triggered on blank-area click (preview switch), not on every edit keystroke.
 
-Export JSON shape:
+## 10. ZIP Export Format
+
+Trigger: Export button.
+
+File name:
+
+- `sticky-board-{Date.now()}.zip`
+
+Archive contents:
+
+- `/{id}.md` for each sticky
+- `/images/{asset-id}.{ext}` for pasted images
+- `/sticky-board-config.json`
+
+`sticky-board-config.json` shape:
 
 ```json
 {
-  "stickys": { "...": { "x": 0, "y": 0, "width": 20, "height": 10, "zIndex": 1, "text": "..." } },
-  "stickyImages": { "<imageKey>": "data:image/...;base64,..." }
+  "id1": { "x": 0, "y": 0, "width": 20, "height": 10, "zIndex": 1, "path": "./id1.md" },
+  "id2": { "x": 16, "y": 16, "width": 20, "height": 10, "zIndex": 2, "path": "./id2.md" }
 }
 ```
 
-Notes:
+Export markdown rewrite:
 
-- Runtime store uses Blob, but export serializes images as base64 data URLs.
-- Import accepts both:
-  - legacy shape: `stickys` object directly.
-  - new shape: `{ stickys, stickyImages }`.
-- Imported image values are normalized into Blob.
-- Imported values merge into existing in-memory state.
+- `sticky-image://<key>` => `./images/<asset-id>.<ext>`
 
-## 12. Localization
+Goal: extracted folder can be opened in VS Code and markdown preview can load images through relative paths.
 
-- UI language selection rule:
-  - If `navigator.language` starts with `zh` -> Chinese.
-  - Else -> English.
-- `index.html` also sets `<html lang>` with same logic.
+## 11. ZIP Import Behavior
 
-## 13. Performance and Resource Controls
+Trigger: Import button (accepts `.zip`).
 
-- Debounced image cleanup.
-- Persistent storage request for reduced eviction risk.
-- Object URL cache with explicit revocation:
-  - per-image on deletion/replacement
-  - global on `beforeunload`
-- IndexedDB async writes avoid main-thread localStorage blocking.
+```mermaid
+flowchart TD
+  A[Load ZIP] --> B[Scan all .md files]
+  B --> C[Try read sticky-board-config.json]
+  C --> D[Match md path -> sticky id]
+  D --> E[For each md parse image links]
+  E --> F{Image path exists in zip?}
+  F -- yes --> G[Import image blob and rewrite to sticky-image://key]
+  F -- no --> H[Keep original relative path unchanged]
+  G --> I[Build imported stickys + images]
+  H --> I
+  I --> J[Merge with current data]
+  J --> K[cleanupUnusedImages]
+  K --> L[await persistStickys + persistImageStore]
+  L --> M[reload]
+```
 
-## 14. Rebuild Checklist (for AI implementation)
+ID resolution rules:
 
-Implement in this order:
+1. Try config path mapping (`path` in config)
+2. If no mapping, generate new ID from `Date.now()` base, incremented by `+100ms` per new file to avoid collisions
 
-1. Base layout + global styles + root/settings containers.
-2. Type models (`Sticky`, `Stickys`) + locale text table.
-3. IndexedDB adapter (`open/read/write`) + migration from localStorage.
-4. Markdown renderer with custom link/image rules.
-5. Card DOM factory + edit/preview toggle.
-6. Paste-image pipeline with `sticky-image://` keys and Blob storage.
-7. Create/move/resize interactions via interactjs.
-8. Settings panel actions (Sunny/export/import) with animation.
-9. Import/export serialization (Blob <-> base64).
-10. Cleanup and object URL lifecycle management.
-11. Startup bootstrap (`persist()`, migrate, load, render).
-12. Verify localStorage only keeps `sunnyThemeEnabled`.
+Default layout for md without config:
+
+- Slight offsets: `(10,10)`, `(20,20)`, `(30,30)` ...
+- Width/height defaults to `20/10`
+- zIndex increments from current max
+
+If image file referenced by relative path is missing in zip:
+
+- Leave original markdown image path untouched
+
+## 12. Settings Panel
+
+Settings items:
+
+- Sunny toggle
+- Export button
+- Import button
+- Layout toggle icon
+- Settings icon
+- GitHub link
+
+Expand/collapse behavior:
+
+- Staggered pop-in/pop-out animation
+- Bottom item appears first
+- Most actions auto-collapse settings after click/change
+
+## 13. Theming and Visual Layers
+
+- Sunny overlay uses `leaves.mp4` as fixed full-screen video
+- Playback is paused/resumed by visibility state
+- Reduced motion media query disables overlay
+- Card/scrollbar/timeline styles are in `src/style.scss`
+
+## 14. Key Invariants
+
+- `sticky-image://` is the only internal image URI scheme
+- `imageStore` must be Blob-based in memory and IndexedDB
+- `bringCardToFront()` is the canonical z-index elevation path
+- Timeline mode and free-layout mode are mutually exclusive render states
+- Import persistence must finish (`await`) before page reload
+
+## 15. Rebuild Order (Recommended)
+
+1. Core types and i18n text table
+2. IndexedDB adapter (`open/read/write`)
+3. Markdown renderer overrides
+4. Card factory + edit/preview toggle
+5. Paste image pipeline + image URI scheme
+6. Drag/create/move/resize interactions
+7. Settings panel + sunny theme + layout mode
+8. Image cleanup and object URL lifecycle
+9. ZIP export
+10. ZIP import (path mapping, fallback IDs/default layout)
+11. Startup bootstrap and final integration checks
