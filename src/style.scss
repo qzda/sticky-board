@@ -154,7 +154,8 @@ body {
       background: rgba(128, 128, 128, 0.14);
       padding: 0.5rem 0.65rem;
       border-radius: 0.35rem;
-      overflow-x: auto;
+      overflow: auto;
+      max-height: 25rem;
     }
 
     code:not(pre code) {
