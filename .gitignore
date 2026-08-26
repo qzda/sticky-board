@@ -24,3 +24,4 @@ dist-ssr
 *.sw?
 bun.lock
 tsconfig.tsbuildinfo
+pnpm-lock.yaml
