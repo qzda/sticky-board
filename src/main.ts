@@ -9,6 +9,9 @@ import upload from "./assets/upload.svg?raw";
 import github from "./assets/github.svg?raw";
 import copyIcon from "./assets/LucideCopy.svg?raw";
 import copyCheckIcon from "./assets/LucideCopyCheck.svg?raw";
+import closeIcon from "./assets/LucideX.svg?raw";
+import maximizeIcon from "./assets/LucideMaximize.svg?raw";
+import minimizeIcon from "./assets/LucideMinimize.svg?raw";
 import leavesVideo from "./assets/leaves.mp4";
 
 /**
@@ -35,8 +38,11 @@ const texts = {
     timelineHint: "双击任意便签可退出时间线，并将该便签置顶后居中显示",
     copyCode: "复制代码",
     copiedCode: "已复制",
+    deleteLabel: "删除便签",
+    maximizeLabel: "最大化",
+    restoreLabel: "还原",
     defaultText:
-      "## Hi naonao\n- 右键卡片进入编辑模式\n- 点击页面空白处预览\n- 按住顶部移动位置\n- 按住右下角移动调整大小\n- 支持粘贴图片（单张不超过 500KB）",
+      "## Hi naonao\n- 右键卡片进入编辑模式，按 Esc 退出编辑\n- 点击页面空白处预览\n- 按住顶部移动位置\n- 按住右下角调整大小\n- 点击右上角按钮可最大化/还原便签\n- 代码块右上角支持一键复制\n- 支持粘贴图片（单张不超过 20MB）",
   },
   en: {
     deleteConfirm: "Are you sure you want to delete this note?",
@@ -53,8 +59,11 @@ const texts = {
       "Double-click any note to exit timeline, then bring it to front and center it",
     copyCode: "Copy code",
     copiedCode: "Copied",
+    deleteLabel: "Delete note",
+    maximizeLabel: "Maximize",
+    restoreLabel: "Restore",
     defaultText:
-      "## Hi naonao\n- Right-click a card to enter edit mode\n- Click on any empty area of the page to preview\n- Drag the top area to move the card\n- Drag the bottom-right corner to resize\n- Paste image is supported (up to 500KB each)",
+      "## Hi naonao\n- Right-click a card to edit, press Esc to exit editing\n- Click any empty area to preview\n- Drag the top area to move the card\n- Drag the bottom-right corner to resize\n- Use the top-right button to maximize/restore the note\n- Code blocks have a one-click copy button\n- Paste image is supported (up to 20MB each)",
   },
 };
 
@@ -576,6 +585,17 @@ document.addEventListener("visibilitychange", () => {
   syncSunnyVideoPlayback();
 });
 
+// Esc 退出编辑模式（最大化铺满视口时无法点击空白处预览）
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+
+  document.querySelectorAll<HTMLDivElement>(".card").forEach((card) => {
+    const textarea = card.querySelector("textarea");
+    if (!textarea || textarea.style.display === "none") return;
+    toggleEditMode(card, false);
+  });
+});
+
 /**
  * Lazily creates image preview overlay.
  * @returns {void}
@@ -773,6 +793,41 @@ async function handleCopyCodeClick(button: HTMLButtonElement): Promise<void> {
 }
 
 /**
+ * Checks whether card dragging and resizing are disabled.
+ * @param {HTMLElement} card Card element.
+ * @returns {boolean} Whether the card is docked or maximized.
+ */
+function isCardTransformLocked(card: HTMLElement): boolean {
+  return isLayoutMode || card.classList.contains("card-maximized");
+}
+
+/**
+ * Toggles the maximized state of one card and syncs its action button.
+ * @param {HTMLElement} card Card element.
+ * @param {boolean} maximized Whether the card should fill the viewport.
+ * @returns {void}
+ */
+function setCardMaximized(card: HTMLElement, maximized: boolean): void {
+  if (maximized) {
+    document
+      .querySelectorAll<HTMLElement>(".card.card-maximized")
+      .forEach((other) => {
+        if (other !== card) setCardMaximized(other, false);
+      });
+  }
+
+  card.classList.toggle("card-maximized", maximized);
+
+  const button = card.querySelector<HTMLButtonElement>(".card-maximize-btn");
+  if (!button) return;
+
+  const label = maximized ? t.restoreLabel : t.maximizeLabel;
+  button.innerHTML = maximized ? minimizeIcon : maximizeIcon;
+  button.title = label;
+  button.setAttribute("aria-label", label);
+}
+
+/**
  * Switches one card between edit and preview mode.
  * @param {HTMLElement} card Card element.
  * @param {boolean} isEditing Whether to switch into edit mode.
@@ -855,9 +910,27 @@ function createCard(
   const resizeBtn = document.createElement("div");
   resizeBtn.className = "resize";
 
-  // 创建删除按钮
+  // 创建右上角操作区（最大化/还原、删除）
+  const actions = document.createElement("div");
+  actions.className = "card-actions";
+
+  const maximizeBtn = document.createElement("button");
+  maximizeBtn.type = "button";
+  maximizeBtn.className = "card-action-btn card-maximize-btn";
+  maximizeBtn.title = t.maximizeLabel;
+  maximizeBtn.setAttribute("aria-label", t.maximizeLabel);
+  maximizeBtn.innerHTML = maximizeIcon;
+  maximizeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    setCardMaximized(card, !card.classList.contains("card-maximized"));
+  });
+
   const deleteBtn = document.createElement("button");
-  deleteBtn.textContent = "×";
+  deleteBtn.type = "button";
+  deleteBtn.className = "card-action-btn card-close-btn";
+  deleteBtn.title = t.deleteLabel;
+  deleteBtn.setAttribute("aria-label", t.deleteLabel);
+  deleteBtn.innerHTML = closeIcon;
   deleteBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     if (confirm(t.deleteConfirm)) {
@@ -868,6 +941,9 @@ function createCard(
       }
     }
   });
+
+  actions.appendChild(maximizeBtn);
+  actions.appendChild(deleteBtn);
 
   // 创建 textarea
   const textarea = document.createElement("textarea");
@@ -959,7 +1035,7 @@ function createCard(
     moveCardToViewportCenter(card);
   });
 
-  card.appendChild(deleteBtn);
+  card.appendChild(actions);
   card.appendChild(resizeBtn);
   card.appendChild(textarea);
   card.appendChild(preview);
@@ -1708,7 +1784,7 @@ interact(".card")
 
     listeners: {
       start(event) {
-        if (isLayoutMode) return;
+        if (isCardTransformLocked(event.target as HTMLElement)) return;
         const target = event.target as HTMLElement;
         target.classList.add("move");
         document.body.classList.add("move");
@@ -1716,14 +1792,14 @@ interact(".card")
       },
 
       end(event) {
-        if (isLayoutMode) return;
+        if (isCardTransformLocked(event.target as HTMLElement)) return;
         const target = event.target as HTMLElement;
         target.classList.remove("move");
         document.body.classList.remove("move");
       },
 
       move(event) {
-        if (isLayoutMode) return;
+        if (isCardTransformLocked(event.target as HTMLElement)) return;
         const target = event.target as HTMLElement;
 
         const width = (event.rect.width / 16) >> 0,
@@ -1759,7 +1835,7 @@ interact(".card")
 
     listeners: {
       start(event) {
-        if (isLayoutMode) return;
+        if (isCardTransformLocked(event.target as HTMLElement)) return;
         const target = event.target as HTMLElement;
         target.classList.add("move");
         document.body.classList.add("move");
@@ -1767,7 +1843,7 @@ interact(".card")
       },
 
       end(event) {
-        if (isLayoutMode) return;
+        if (isCardTransformLocked(event.target as HTMLElement)) return;
         const target = event.target as HTMLElement;
         target.classList.remove("move");
         document.body.classList.remove("move");
@@ -1787,7 +1863,7 @@ interact(".card")
       },
 
       move(event) {
-        if (isLayoutMode) return;
+        if (isCardTransformLocked(event.target as HTMLElement)) return;
         const target = event.target as HTMLElement;
         let [x, y] = (target.getAttribute("data-xy") || "0,0")
           .split(",")

@@ -128,6 +128,9 @@ Custom rules:
 
 - Edit mode: `textarea` visible
 - Preview mode: `.preview` visible (HTML from markdown)
+- `Escape` exits edit mode for any card still editing (needed when a maximized card
+  covers the whole canvas, so there is no blank area left to click)
+- Card chrome (`.card-actions`, top-right): maximize/restore + delete button
 
 Global click behavior:
 
@@ -160,6 +163,31 @@ Fenced blocks (```lang) and indented blocks render as:
   then icon/label restore after 1.5s; timer per button is kept in a `WeakMap`
 - `prefers-reduced-motion: reduce` disables the animation
 
+### 6.5 Card Actions and Maximize
+
+Buttons live in `.card-actions` inside the top border strip (`1.4rem` tall):
+
+- `.card-maximize-btn`: maximize/restore, icon swaps between `LucideMaximize` and
+  `LucideMinimize`, label between "最大化" and "还原" (localized)
+- `.card-close-btn`: delete with confirm, icon is `LucideX`
+- Both use the same `1.4rem` hit area as the code-block copy button; the close icon is
+  `1.3rem` while the maximize/restore icon is `1rem`, and both stay vertically centered
+  in the top strip via flex `align-items: center`
+
+Maximize behavior:
+
+- State is only the transient class `card-maximized`; nothing is added to the persisted
+  `Sticky` model, so a reload restores the saved `x/y/width/height`
+- CSS: `position: fixed`, `100dvw x 100dvh`, `transform: none !important`,
+  `z-index: 6100 !important` (above `#settings` at `6000`, below the image preview
+  overlay at `9999`), hidden `.resize`, larger `textarea`/`.preview` padding
+- Images in a maximized card are capped at `max-width: 50vw` instead of full width
+- Only one card can be maximized at a time; maximizing another card restores the previous one
+- While maximized, drag and resize listeners bail out via `isCardTransformLocked()`
+  (`isLayoutMode || .card-maximized`), so geometry stays untouched
+- Timeline mode keeps the same card chrome: `.layout-docked` only differs by
+  `max-height: 20rem`, so maximize/delete buttons stay visible and usable
+
 ## 7. Interaction Model
 
 ### 7.1 Create Card by Dragging Empty Canvas
@@ -185,6 +213,11 @@ Using `interactjs`:
 
 - Right-click card enters edit mode (except delete button/resize handle)
 - Left click card brings it to top z-index
+
+### 7.4 Card Action Buttons
+
+- Buttons call `stopPropagation()`, so they never bring the card to front or start a drag
+- Maximize/restore keeps the saved geometry; delete re-renders the timeline when docked
 
 ## 8. Timeline Layout Mode
 

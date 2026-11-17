@@ -12,10 +12,14 @@ All data is stored locally only. No account required, no synchronization needed 
 
 - 🔒 **Local Storage** – All data is stored only in the browser
 - 📄 **Markdown** – Write content using Markdown syntax with preview support
-- 🖼️ **Paste Images** – Paste images from clipboard into Markdown (limit: 500KB per image)
+- ⌨️ **Quick Editing** – Right-click a card to edit, click any blank area or press Esc to preview
+- 📋 **Copy Code** – Preview code blocks include a one-click copy button
+- 🖼️ **Paste Images** – Paste images from clipboard into Markdown (limit: 20MB per image)
 - 📐 **Grid Alignment** – Cards snap to a grid when moving or resizing
+- 🗖 **Maximize Note** – Expand a single note to fill the viewport, restore it with one click
+- 🗓️ **Timeline Layout** – Group notes by date in a timeline view
 - 💾 **Auto Save** – All changes are saved automatically
-- 📤 **Import / Export** – Stickies and pasted images can be imported/exported as JSON
+- 📤 **Import / Export** – Stickies and pasted images are exported as a ZIP (Markdown + images + config)
 - 🌤️ **Sunny Theme** – Optional animated leaves shadow overlay
 - 🌓 **Dark Mode** – Automatically follows the system theme
 - 🌍 **Multi-language** – Automatically switches between Chinese and English based on browser language
