@@ -816,7 +816,11 @@ function setCardMaximized(card: HTMLElement, maximized: boolean): void {
       });
   }
 
-  card.classList.toggle("card-maximized", maximized);
+  if (card.classList.contains("layout-docked")) {
+    animateDockedMaximize(card, maximized);
+  } else {
+    card.classList.toggle("card-maximized", maximized);
+  }
 
   const button = card.querySelector<HTMLButtonElement>(".card-maximize-btn");
   if (!button) return;
@@ -825,6 +829,43 @@ function setCardMaximized(card: HTMLElement, maximized: boolean): void {
   button.innerHTML = maximized ? minimizeIcon : maximizeIcon;
   button.title = label;
   button.setAttribute("aria-label", label);
+}
+
+/**
+ * Toggles maximize for a flow-positioned (timeline) card with a FLIP offset.
+ *
+ * Docked cards use `position: relative` and `transform: none !important`, so the
+ * `position` switch to `fixed` cannot be transitioned and the card would otherwise
+ * snap to the viewport corner. The offset is applied through `translate`, which is
+ * independent of `transform`, while width/height keep their normal CSS transition.
+ * @param {HTMLElement} card Card element.
+ * @param {boolean} maximized Whether the card should fill the viewport.
+ * @returns {void}
+ */
+function animateDockedMaximize(
+  card: HTMLElement,
+  maximized: boolean,
+): void {
+  const before = card.getBoundingClientRect();
+  const style = getComputedStyle(card);
+  const duration = style.transitionDuration.split(",")[0].trim();
+  const easing = style.transitionTimingFunction.split(",")[0].trim();
+  const sizeTransition = ["width", "height", "max-width", "max-height"]
+    .map((property) => `${property} ${duration} ${easing}`)
+    .join(", ");
+
+  // 先只保留尺寸过渡，让位置补偿立即生效
+  card.style.transition = sizeTransition;
+  card.classList.toggle("card-maximized", maximized);
+
+  const after = card.getBoundingClientRect();
+  card.style.translate = `${before.left - after.left}px ${before.top - after.top}px`;
+  void card.offsetWidth;
+
+  requestAnimationFrame(() => {
+    card.style.transition = "";
+    card.style.translate = "0px 0px";
+  });
 }
 
 /**
@@ -1564,6 +1605,41 @@ function renderTimelineLayout(): void {
 }
 
 /**
+ * Animates cards from their pre-layout rects to their new positions (FLIP).
+ * @param {HTMLElement[]} cards Cards captured before the layout change.
+ * @param {Map<HTMLElement, DOMRect>} previousRects Viewport rect per card.
+ * @returns {void}
+ */
+function animateCardLayoutChange(
+  cards: HTMLElement[],
+  previousRects: Map<HTMLElement, DOMRect>,
+): void {
+  cards.forEach((card) => {
+    const previous = previousRects.get(card);
+    if (!previous) return;
+
+    const current = card.getBoundingClientRect();
+    const dx = previous.left - current.left;
+    const dy = previous.top - current.top;
+
+    // 强制回流，让后续位移过渡有明确的起点
+    void card.offsetWidth;
+
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
+      card.style.transition = "";
+      return;
+    }
+
+    card.style.translate = `${dx}px ${dy}px`;
+
+    requestAnimationFrame(() => {
+      card.style.transition = "";
+      card.style.translate = "0px 0px";
+    });
+  });
+}
+
+/**
  * Toggles timeline layout mode on/off.
  * @param {boolean} enabled Whether to enable layout mode.
  * @returns {void}
@@ -1571,6 +1647,15 @@ function renderTimelineLayout(): void {
 function setLayoutMode(enabled: boolean): void {
   if (enabled === isLayoutMode) return;
   ensureLayoutPanel();
+
+  // 先记录卡片位置并关闭过渡，布局切换后再用 FLIP 补间
+  const cards = Array.from(document.querySelectorAll<HTMLElement>(".card"));
+  const previousRects = new Map<HTMLElement, DOMRect>();
+  cards.forEach((card) => {
+    previousRects.set(card, card.getBoundingClientRect());
+    card.style.transition = "none";
+  });
+
   isLayoutMode = enabled;
   document.body.classList.toggle("layout-timeline", isLayoutMode);
   document.documentElement.classList.toggle("layout-timeline", isLayoutMode);
@@ -1579,10 +1664,11 @@ function setLayoutMode(enabled: boolean): void {
   if (isLayoutMode) {
     setSettingsExpanded(false);
     renderTimelineLayout();
-    return;
+  } else {
+    restoreFromLayoutMode();
   }
 
-  restoreFromLayoutMode();
+  animateCardLayoutChange(cards, previousRects);
 }
 
 // 点击 settings 按钮展开/收起

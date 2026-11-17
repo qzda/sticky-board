@@ -37,6 +37,11 @@ body {
     user-select: none;
   }
 
+  // 拖拽/缩放期间关闭卡片过渡，避免跟手滞后
+  &.move .card {
+    transition: none;
+  }
+
   &.layout-timeline {
     overflow: auto;
     overflow-x: hidden;
@@ -81,6 +86,7 @@ body {
     1rem 1rem 1rem rgba(128, 128, 128, 0.25),
     -0.5rem -0.5rem 0.5rem rgba(128, 128, 128, 0.125);
   z-index: 1;
+  transition: all 0.2s ease-in-out;
 
   // &::before {
   //   content: "";
@@ -101,6 +107,10 @@ body {
     z-index: 1 !important;
     max-height: 20rem;
     flex: 0 0 auto;
+
+    .resize {
+      display: none;
+    }
   }
 
   &.card-maximized {
@@ -109,8 +119,8 @@ body {
     left: 0;
     width: 100dvw !important;
     height: 100dvh !important;
-    max-width: none;
-    max-height: none;
+    max-width: 100dvw;
+    max-height: 100dvh;
     transform: none !important;
     z-index: 6100 !important;
 
@@ -200,19 +210,28 @@ body {
     }
 
     .code-block {
-      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: start;
       margin-bottom: 1em;
+      border-radius: 0.35rem;
+      background: rgba(128, 128, 128, 0.14);
+      overflow: hidden;
 
       pre {
+        grid-area: 1 / 1;
         margin: 0;
-        padding-right: 1.9rem;
+        background: transparent;
+        border-radius: 0;
       }
     }
 
     .copy-code-btn {
-      position: absolute;
-      top: 0.3rem;
-      right: 0.3rem;
+      grid-area: 1 / 2;
+      position: static;
+      align-self: start;
+      justify-self: end;
+      margin: 0.3rem;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -250,7 +269,13 @@ body {
 
       &.copied {
         opacity: 1;
+        color: #16a34a;
         animation: copy-pop 0.35s ease;
+
+        svg,
+        svg * {
+          color: inherit;
+        }
       }
     }
 

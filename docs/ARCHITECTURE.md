@@ -153,14 +153,18 @@ Fenced blocks (```lang) and indented blocks render as:
 </div>
 ```
 
+- `.code-block` is a two-column grid: `pre` in `1 / 1`, the copy button in `1 / 2`,
+  and the tinted background/padding live on the wrapper, so the button sits outside the
+  scrolling area and never overlaps long or horizontally scrolled code
 - Code text is escaped with `md.utils.escapeHtml`; no syntax highlighter dependency
 - Copy handler is delegated on `.preview`, so it keeps working after `innerHTML` refresh
 - Button click calls `preventDefault()` + `stopPropagation()` to avoid opening image preview
   or bringing the card to front
 - Clipboard: `navigator.clipboard.writeText`, falling back to a temporary `textarea`
   + `document.execCommand("copy")` when the Clipboard API is unavailable (e.g. http)
-- Feedback: icon swaps to `LucideCopyCheck`, `.copied` plays `copy-pop` for ~0.35s,
-  then icon/label restore after 1.5s; timer per button is kept in a `WeakMap`
+- Feedback: icon swaps to `LucideCopyCheck` and turns green (`#16a34a`), `.copied` plays
+  `copy-pop` for ~0.35s, then icon/label/color restore after 1.5s; timer per button is
+  kept in a `WeakMap`
 - `prefers-reduced-motion: reduce` disables the animation
 
 ### 6.5 Card Actions and Maximize
@@ -182,11 +186,25 @@ Maximize behavior:
   `z-index: 6100 !important` (above `#settings` at `6000`, below the image preview
   overlay at `9999`), hidden `.resize`, larger `textarea`/`.preview` padding
 - Images in a maximized card are capped at `max-width: 50vw` instead of full width
+- Animation: `.card` transitions `all 0.2s ease-in-out`; `.card-maximized` keeps
+  `max-width: 100dvw` / `max-height: 100dvh` instead of `none`, so max constraints
+  interpolate together with width/height — `none` is not animatable and makes restore
+  snap to `50rem` before sliding. `body.move .card { transition: none }` disables
+  transitions during drag/resize so cards track the pointer without lag
+- Docked (timeline) cards need an extra step: they are flow-positioned with
+  `transform: none !important`, so the absolute/fixed switch is not animatable and the
+  card would jump to the viewport corner. `animateDockedMaximize()` temporarily limits
+  the inline transition to size properties, applies a `translate` FLIP offset from the
+  old rect, then animates it to `0 0` while size keeps transitioning. Free-layout cards
+  keep the simpler path because their `transform` interpolation already provides the
+  motion
 - Only one card can be maximized at a time; maximizing another card restores the previous one
 - While maximized, drag and resize listeners bail out via `isCardTransformLocked()`
   (`isLayoutMode || .card-maximized`), so geometry stays untouched
-- Timeline mode keeps the same card chrome: `.layout-docked` only differs by
-  `max-height: 20rem`, so maximize/delete buttons stay visible and usable
+- Timeline mode keeps the same card chrome: `.layout-docked` shares the normal card
+  styles apart from `max-height: 20rem`, so maximize/delete buttons stay visible and
+  usable. It also hides the invisible `.resize` handle, so interact.js no longer
+  registers resize edges or sets the `nwse-resize` cursor
 
 ## 7. Interaction Model
 
@@ -238,6 +256,16 @@ Special interaction in timeline mode:
   - exit timeline mode
   - bring that card to top
   - move it to viewport center (snapped to 16px grid)
+
+Toggle animation (`setLayoutMode` + `animateCardLayoutChange`):
+
+- Capture each card's viewport rect before the layout change
+- Disable `transition` on cards, apply the docked/free layout, then measure new rects
+- Set a FLIP offset through the standalone `translate` property (independent of the
+  inline `transform` used for free positioning and of `.layout-docked`'s
+  `transform: none !important`)
+- On the next frame restore transitions and animate `translate` to `0 0`, so cards glide
+  from their old position to the new one in both directions
 
 ## 9. Image Lifecycle
 
