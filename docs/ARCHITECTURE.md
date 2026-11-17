@@ -379,7 +379,7 @@ Expand/collapse behavior:
 - `lint` — same as above with `--fix`
 - `typecheck` — `tsc -b`
 - `check` — `npm run lint:check && npm run typecheck`
-- `build` — `typecheck` then `vite build`
+- `build` — `npm run check && vite build` (lint + types are enforced on deploy too)
 - `prepare` runs `husky`, which wires `.husky/pre-commit` to `npm run check` and
   `npx lint-staged`
 - lint-staged runs `eslint --fix --no-warn-ignored` on staged `js/jsx/ts/tsx/mjs/cjs`
