@@ -7,6 +7,8 @@ import layout from "./assets/layout.svg?raw";
 import download from "./assets/download.svg?raw";
 import upload from "./assets/upload.svg?raw";
 import github from "./assets/github.svg?raw";
+import copyIcon from "./assets/LucideCopy.svg?raw";
+import copyCheckIcon from "./assets/LucideCopyCheck.svg?raw";
 import leavesVideo from "./assets/leaves.mp4";
 
 /**
@@ -31,6 +33,8 @@ const texts = {
     exportLabel: "导出",
     importLabel: "导入",
     timelineHint: "双击任意便签可退出时间线，并将该便签置顶后居中显示",
+    copyCode: "复制代码",
+    copiedCode: "已复制",
     defaultText:
       "## Hi naonao\n- 右键卡片进入编辑模式\n- 点击页面空白处预览\n- 按住顶部移动位置\n- 按住右下角移动调整大小\n- 支持粘贴图片（单张不超过 500KB）",
   },
@@ -47,6 +51,8 @@ const texts = {
     importLabel: "Import",
     timelineHint:
       "Double-click any note to exit timeline, then bring it to front and center it",
+    copyCode: "Copy code",
+    copiedCode: "Copied",
     defaultText:
       "## Hi naonao\n- Right-click a card to enter edit mode\n- Click on any empty area of the page to preview\n- Drag the top area to move the card\n- Drag the bottom-right corner to resize\n- Paste image is supported (up to 500KB each)",
   },
@@ -660,12 +666,110 @@ md.renderer.rules.image = (tokens, idx, options, _env, self) => {
 };
 
 /**
+ * Renders one code block wrapped with a copy button.
+ * @param {string} content Raw code text.
+ * @param {string} langName Language name from fence info, may be empty.
+ * @returns {string} HTML for the code block.
+ */
+function renderCodeBlock(content: string, langName: string): string {
+  const escapedCode = md.utils.escapeHtml(content);
+  const classAttr = langName
+    ? ` class="language-${md.utils.escapeHtml(langName)}"`
+    : "";
+
+  return (
+    `<div class="code-block">` +
+    `<button type="button" class="copy-code-btn" title="${t.copyCode}" ` +
+    `aria-label="${t.copyCode}">${copyIcon}</button>` +
+    `<pre><code${classAttr}>${escapedCode}</code></pre>` +
+    `</div>`
+  );
+}
+
+md.renderer.rules.fence = (tokens, idx) => {
+  const token = tokens[idx];
+  const langName = token.info ? token.info.trim().split(/\s+/g)[0] : "";
+  return renderCodeBlock(token.content, langName ?? "");
+};
+
+md.renderer.rules.code_block = (tokens, idx) => {
+  const token = tokens[idx];
+  return renderCodeBlock(token.content, "");
+};
+
+/**
  * Renders markdown text to HTML.
  * @param {string} text Markdown source.
  * @returns {string} Rendered HTML.
  */
 function textToHtml(text: string): string {
   return md.render(text);
+}
+
+const copyResetTimers = new WeakMap<HTMLButtonElement, number>();
+
+/**
+ * Copies text to clipboard, falling back to a temporary textarea.
+ * @param {string} text Text to copy.
+ * @returns {Promise<boolean>} Whether copying succeeded.
+ */
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (error) {
+    console.warn("Clipboard API unavailable, using fallback copy", error);
+  }
+
+  try {
+    const helper = document.createElement("textarea");
+    helper.value = text;
+    helper.setAttribute("readonly", "");
+    helper.style.position = "fixed";
+    helper.style.top = "-1000px";
+    helper.style.opacity = "0";
+    document.body.appendChild(helper);
+    helper.select();
+    const copied = document.execCommand("copy");
+    helper.remove();
+    return copied;
+  } catch (error) {
+    console.warn("Copy failed", error);
+    return false;
+  }
+}
+
+/**
+ * Copies the code block content and plays the copied state animation.
+ * @param {HTMLButtonElement} button Copy button inside a `.code-block`.
+ * @returns {Promise<void>}
+ */
+async function handleCopyCodeClick(button: HTMLButtonElement): Promise<void> {
+  const code = button.closest(".code-block")?.querySelector("pre code");
+  const copied = await copyTextToClipboard(code?.textContent ?? "");
+  if (!copied) return;
+
+  const existingTimer = copyResetTimers.get(button);
+  if (existingTimer !== undefined) {
+    window.clearTimeout(existingTimer);
+  }
+
+  button.classList.add("copied");
+  button.innerHTML = copyCheckIcon;
+  button.setAttribute("title", t.copiedCode);
+  button.setAttribute("aria-label", t.copiedCode);
+
+  const timer = window.setTimeout(() => {
+    button.classList.remove("copied");
+    button.innerHTML = copyIcon;
+    button.setAttribute("title", t.copyCode);
+    button.setAttribute("aria-label", t.copyCode);
+    copyResetTimers.delete(button);
+  }, 1500);
+
+  copyResetTimers.set(button, timer);
 }
 
 /**
@@ -815,6 +919,15 @@ function createCard(
   preview.innerHTML = textToHtml(textarea.value);
   preview.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
+    const copyButton = target.closest<HTMLButtonElement>(".copy-code-btn");
+
+    if (copyButton) {
+      e.preventDefault();
+      e.stopPropagation();
+      void handleCopyCodeClick(copyButton);
+      return;
+    }
+
     if (target.tagName !== "IMG") return;
     e.stopPropagation();
     const image = target as HTMLImageElement;

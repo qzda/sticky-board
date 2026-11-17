@@ -121,6 +121,8 @@ Custom rules:
   - If src starts with `sticky-image://`, lookup `imageStore[key]`
   - Convert Blob -> Object URL (cached)
   - If missing image, fallback alt to `[missing image]`
+- Fence / code_block rules: wrap code blocks into `.code-block` with a copy button
+  (see 6.4)
 
 ### 6.2 Card Modes
 
@@ -136,6 +138,27 @@ Global click behavior:
 
 - Clicking image inside preview opens modal overlay
 - Close by background click or `Escape`
+
+### 6.4 Code Block Copy
+
+Fenced blocks (```lang) and indented blocks render as:
+
+```
+<div class="code-block">
+  <button class="copy-code-btn">copy icon</button>
+  <pre><code class="language-xxx">escaped code</code></pre>
+</div>
+```
+
+- Code text is escaped with `md.utils.escapeHtml`; no syntax highlighter dependency
+- Copy handler is delegated on `.preview`, so it keeps working after `innerHTML` refresh
+- Button click calls `preventDefault()` + `stopPropagation()` to avoid opening image preview
+  or bringing the card to front
+- Clipboard: `navigator.clipboard.writeText`, falling back to a temporary `textarea`
+  + `document.execCommand("copy")` when the Clipboard API is unavailable (e.g. http)
+- Feedback: icon swaps to `LucideCopyCheck`, `.copied` plays `copy-pop` for ~0.35s,
+  then icon/label restore after 1.5s; timer per button is kept in a `WeakMap`
+- `prefers-reduced-motion: reduce` disables the animation
 
 ## 7. Interaction Model
 
