@@ -372,3 +372,17 @@ Expand/collapse behavior:
 9. ZIP export
 10. ZIP import (path mapping, fallback IDs/default layout)
 11. Startup bootstrap and final integration checks
+
+## 16. Code Quality Gates
+
+- `lint:check` — ESLint flat config (`eslint.config.mjs`, `@eslint/js` + `typescript-eslint`)
+- `lint` — same as above with `--fix`
+- `typecheck` — `tsc -b`
+- `check` — `npm run lint:check && npm run typecheck`
+- `build` — `typecheck` then `vite build`
+- `prepare` runs `husky`, which wires `.husky/pre-commit` to `npm run check` and
+  `npx lint-staged`
+- lint-staged runs `eslint --fix --no-warn-ignored` on staged `js/jsx/ts/tsx/mjs/cjs`
+  files, so lint errors block the commit while fixable issues are auto-fixed
+- Project scripts assume npm (`npm run <script>`) because that is what the deployment
+  environment uses

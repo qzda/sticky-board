@@ -6,17 +6,30 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "eslint . --fix",
+    "lint:check": "eslint .",
+    "typecheck": "tsc -b",
+    "check": "npm run lint:check && npm run typecheck",
+    "prepare": "husky"
   },
   "dependencies": {
     "interactjs": "^1.10.27",
-    "markdown-it": "^14.1.0",
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "markdown-it": "^14.1.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/markdown-it": "^14.1.2",
+    "eslint": "^10.15.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.1",
     "sass": "^1.93.2",
     "typescript": "~5.9.3",
+    "typescript-eslint": "^8.72.2",
     "vite": "^7.2.7"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,mjs,cjs}": "eslint --fix --no-warn-ignored"
   }
 }
