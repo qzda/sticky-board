@@ -12,6 +12,8 @@ import copyCheckIcon from "./assets/LucideCopyCheck.svg?raw";
 import closeIcon from "./assets/LucideX.svg?raw";
 import maximizeIcon from "./assets/LucideMaximize.svg?raw";
 import minimizeIcon from "./assets/LucideMinimize.svg?raw";
+import editIcon from "./assets/LucideSquarePen.svg?raw";
+import previewIcon from "./assets/LucideEye.svg?raw";
 import leavesVideo from "./assets/leaves.mp4";
 
 /**
@@ -41,8 +43,10 @@ const texts = {
     deleteLabel: "删除便签",
     maximizeLabel: "最大化",
     restoreLabel: "还原",
+    editLabel: "编辑",
+    previewLabel: "预览",
     defaultText:
-      "## Hi naonao\n- 右键卡片进入编辑模式，按 Esc 退出编辑\n- 点击页面空白处预览\n- 按住顶部移动位置\n- 按住右下角调整大小\n- 点击右上角按钮可最大化/还原便签\n- 代码块右上角支持一键复制\n- 支持粘贴图片（单张不超过 20MB）",
+      "## Hi naonao\n- 右键卡片进入编辑模式，按 Esc 退出编辑\n- 点击顶栏按钮可切换编辑/预览\n- 点击页面空白处预览\n- 按住顶部移动位置\n- 按住右下角调整大小\n- 点击右上角按钮可最大化/还原便签\n- 代码块右上角支持一键复制\n- 支持粘贴图片（单张不超过 20MB）",
   },
   en: {
     deleteConfirm: "Are you sure you want to delete this note?",
@@ -62,8 +66,10 @@ const texts = {
     deleteLabel: "Delete note",
     maximizeLabel: "Maximize",
     restoreLabel: "Restore",
+    editLabel: "Edit",
+    previewLabel: "Preview",
     defaultText:
-      "## Hi naonao\n- Right-click a card to edit, press Esc to exit editing\n- Click any empty area to preview\n- Drag the top area to move the card\n- Drag the bottom-right corner to resize\n- Use the top-right button to maximize/restore the note\n- Code blocks have a one-click copy button\n- Paste image is supported (up to 20MB each)",
+      "## Hi naonao\n- Right-click a card to edit, press Esc to exit editing\n- Use the top-bar button to switch between edit and preview\n- Click any empty area to preview\n- Drag the top area to move the card\n- Drag the bottom-right corner to resize\n- Use the top-right button to maximize/restore the note\n- Code blocks have a one-click copy button\n- Paste image is supported (up to 20MB each)",
   },
 };
 
@@ -869,6 +875,25 @@ function animateDockedMaximize(
 }
 
 /**
+ * Syncs the top-bar edit/preview button with the card's current mode.
+ * Shows the edit icon while previewing and the eye icon while editing.
+ * @param {HTMLElement} card Card element.
+ * @returns {void}
+ */
+function syncEditToggleButton(card: HTMLElement): void {
+  const button = card.querySelector<HTMLButtonElement>(".card-edit-btn");
+  if (!button) return;
+
+  const textarea = card.querySelector("textarea");
+  const isEditing = textarea?.style.display !== "none";
+  const label = isEditing ? t.previewLabel : t.editLabel;
+
+  button.innerHTML = isEditing ? previewIcon : editIcon;
+  button.title = label;
+  button.setAttribute("aria-label", label);
+}
+
+/**
  * Switches one card between edit and preview mode.
  * @param {HTMLElement} card Card element.
  * @param {boolean} isEditing Whether to switch into edit mode.
@@ -893,6 +918,8 @@ function toggleEditMode(card: HTMLElement, isEditing: boolean): void {
       preview.style.display = "block";
       preview.innerHTML = textToHtml(textarea.value);
     }
+
+    syncEditToggleButton(card);
   });
 }
 
@@ -910,6 +937,7 @@ function toggleAllToPreview(): void {
       textarea.style.display = "none";
       preview.style.display = "block";
       preview.innerHTML = textToHtml(textarea.value);
+      syncEditToggleButton(card);
     }
   });
 }
@@ -951,9 +979,22 @@ function createCard(
   const resizeBtn = document.createElement("div");
   resizeBtn.className = "resize";
 
-  // 创建右上角操作区（最大化/还原、删除）
+  // 创建右上角操作区（编辑/预览、最大化/还原、删除）
   const actions = document.createElement("div");
   actions.className = "card-actions";
+
+  const editBtn = document.createElement("button");
+  editBtn.type = "button";
+  editBtn.className = "card-action-btn card-edit-btn";
+  editBtn.title = t.editLabel;
+  editBtn.setAttribute("aria-label", t.editLabel);
+  editBtn.innerHTML = editIcon;
+  editBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const textarea = card.querySelector("textarea");
+    const isEditing = textarea?.style.display !== "none";
+    toggleEditMode(card, !isEditing);
+  });
 
   const maximizeBtn = document.createElement("button");
   maximizeBtn.type = "button";
@@ -983,6 +1024,7 @@ function createCard(
     }
   });
 
+  actions.appendChild(editBtn);
   actions.appendChild(maximizeBtn);
   actions.appendChild(deleteBtn);
 

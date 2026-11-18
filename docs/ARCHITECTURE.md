@@ -130,7 +130,8 @@ Custom rules:
 - Preview mode: `.preview` visible (HTML from markdown)
 - `Escape` exits edit mode for any card still editing (needed when a maximized card
   covers the whole canvas, so there is no blank area left to click)
-- Card chrome (`.card-actions`, top-right): maximize/restore + delete button
+- Card chrome (`.card-actions`, top-right): edit/preview toggle + maximize/restore +
+  delete button
 
 Global click behavior:
 
@@ -171,12 +172,16 @@ Fenced blocks (```lang) and indented blocks render as:
 
 Buttons live in `.card-actions` inside the top border strip (`1.4rem` tall):
 
+- `.card-edit-btn`: toggles edit/preview for that card. Shows `LucideSquarePen` while
+  previewing (click to edit) and `LucideEye` while editing (click to preview); label and
+  `aria-label` follow the action. `syncEditToggleButton()` re-syncs the icon whenever the
+  mode changes from elsewhere (right-click, Esc, blank-area click, initial render)
 - `.card-maximize-btn`: maximize/restore, icon swaps between `LucideMaximize` and
   `LucideMinimize`, label between "最大化" and "还原" (localized)
 - `.card-close-btn`: delete with confirm, icon is `LucideX`
-- Both use the same `1.4rem` hit area as the code-block copy button; the close icon is
-  `1.3rem` while the maximize/restore icon is `1rem`, and both stay vertically centered
-  in the top strip via flex `align-items: center`
+- All three use the same `1.4rem` hit area as the code-block copy button; the close icon
+  is `1.3rem` and stays vertically centered in the top strip via flex
+  `align-items: center`
 
 Maximize behavior:
 
@@ -230,6 +235,7 @@ Using `interactjs`:
 ### 7.3 Edit Entry
 
 - Right-click card enters edit mode (except delete button/resize handle)
+- `.card-edit-btn` in the top bar toggles edit/preview without needing a context menu
 - Left click card brings it to top z-index
 
 ### 7.4 Card Action Buttons

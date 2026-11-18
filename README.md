@@ -13,6 +13,7 @@ All data is stored locally only. No account required, no synchronization needed 
 - 🔒 **Local Storage** – All data is stored only in the browser
 - 📄 **Markdown** – Write content using Markdown syntax with preview support
 - ⌨️ **Quick Editing** – Right-click a card to edit, click any blank area or press Esc to preview
+- ✏️ **Edit / Preview Toggle** – Switch a note between edit and preview from the top-bar button
 - 📋 **Copy Code** – Preview code blocks include a one-click copy button
 - 🖼️ **Paste Images** – Paste images from clipboard into Markdown (limit: 20MB per image)
 - 📐 **Grid Alignment** – Cards snap to a grid when moving or resizing
