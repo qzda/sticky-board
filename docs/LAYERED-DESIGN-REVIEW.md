@@ -18,8 +18,9 @@
 | P2-1 常量与层级魔法数字 | 已完成 | `9531df4` |
 | P2-2 导入数据校验 | 已完成 | `a425051` |
 | P2-5 测试与工具链 | 已完成 | `8934ffb` |
+| P2-4 可访问性与小缺陷 | 已完成 | `9dde289` |
 
-P0-2 的图片 Referrer Policy 已落实，原样 HTML 信任边界见下文。待处理项为 P2-3（错误提示）和 P2-4（可访问性与小缺陷）。
+P0-2 的图片 Referrer Policy 已落实，原样 HTML 信任边界见下文。待处理项为 P2-3（错误提示）。
 
 ## 1. 现状分层快照
 
@@ -111,6 +112,15 @@ P0-2 的图片 Referrer Policy 已落实，原样 HTML 信任边界见下文。�
 - 缺图 alt 写死英文 `[missing image]`（`src/main.ts:687`），未走 i18n。
 - 拖拽创建中途切到时间轴时没有 `finishCreateDragging()` 清理；按钮位于拖拽热区内，建议确认从按钮按下拖动是否会移动卡片（可在 `ignoreFrom` 里补 `.card-actions`）。
 - 时间轴下最大化后退出时间轴，卡片仍是 `card-maximized` 全屏态，建议确认是否符合预期并写进文档。
+
+处理结果：
+
+- 重复 id 已在更早改动中修复（textarea 现为 `${id}-input`）。
+- Settings / Layout 图标改为 `<button>`（`createSettingsIconButton()`，带 `aria-label`），可键盘聚焦。
+- 进入编辑模式改用 `requestAnimationFrame` 聚焦，删除 `EDIT_FOCUS_DELAY_MS` 的 200ms 延迟。
+- 缺图 alt 走 i18n 的 `missingImage`。
+- `setLayoutMode()` 先调用 `finishCreateDragging()` 清理绘制残留；拖拽 `ignoreFrom` 补 `.card-actions`。
+- 退出时间轴时 `restoreFromLayoutMode()` 还原仍处于最大化的停靠卡片，并写入 `ARCHITECTURE.md`。
 
 ### P2-5 测试与工具链（已完成）
 
