@@ -1,23 +1,23 @@
-# Sticky Board Architecture
+# Sticky Board 架构
 
-This document reflects the current implementation in `src/main.ts` and `src/style.scss`.
-It is written so an engineer (or AI) can rebuild the app behavior with minimal ambiguity.
+本文档反映 `src/main.ts` 与 `src/style.scss` 的当前实现。
+编写目标是让工程师（或 AI）能以尽可能少的歧义重建应用行为。
 
-## 1. System Overview
+## 1. 系统概览
 
-Sticky Board is a browser-only sticky-note app with:
+Sticky Board 是一个纯浏览器端的便签应用，包含：
 
-- Markdown notes (edit + preview)
-- Drag/resize interactions (grid-snapped)
-- Pasted image support (Blob storage)
-- IndexedDB persistence for notes/images
-- ZIP import/export (`.md + images + sticky-board-config.json`)
-- Timeline layout mode
-- Optional Sunny visual theme (video overlay)
+- Markdown 便签（编辑 + 预览）
+- 拖拽/缩放交互（网格吸附）
+- 粘贴图片支持（Blob 存储）
+- 便签/图片的 IndexedDB 持久化
+- ZIP 导入/导出（`.md + images + sticky-board-config.json`）
+- 时间轴布局模式
+- 可选的 Sunny 视觉主题（视频遮罩层）
 
-No backend, no user account, no remote sync.
+没有后端、没有用户账号、没有远程同步。
 
-## 2. Runtime Architecture
+## 2. 运行时架构
 
 ```mermaid
 flowchart LR
@@ -30,7 +30,7 @@ flowchart LR
   CORE --> CSS[src/style.scss]
 ```
 
-## 3. Data Model
+## 3. 数据模型
 
 ```ts
 type Sticky = {
@@ -45,68 +45,64 @@ type Sticky = {
 type Stickys = Record<string, Sticky>;
 ```
 
-In-memory stores:
+内存中的存储：
 
 - `stickys: Stickys`
 - `imageStore: Record<string, Blob>`
-- `imageUrlCache: Map<string, string>` (Object URL cache for rendering)
+- `imageUrlCache: Map<string, string>`（用于渲染的 Object URL 缓存）
 - `cardElementMap: Map<string, HTMLDivElement>`
 
-State ownership:
+状态归属：
 
-- `stickys` is the single source of truth for card geometry (`x/y/width/height/zIndex`)
-- `applyCardGeometry()` projects model geometry onto a card element; `commitCardGeometry()` mutates the model and re-projects it
-- Cards do not mirror geometry into `data-xy` / `data-size` / `data-zindex` attributes
-- Edit state is read through `isCardEditing(card)` instead of checking `textarea.style.display` at each call site
-- Timeline state is derived from `body.layout-timeline` through `isTimelineLayout()`; there is no separate boolean flag
-- DOM ids: the card element id is the sticky id, and its textarea id is `${id}-input`
+- `stickys` 是卡片几何信息（`x/y/width/height/zIndex`）的唯一事实源
+- `applyCardGeometry()` 把模型中的几何信息投影到卡片元素上；`commitCardGeometry()` 先修改模型，再重新投影
+- 卡片不再把几何信息镜像到 `data-xy` / `data-size` / `data-zindex` 属性
+- 编辑状态统一通过 `isCardEditing(card)` 读取，而不是在每个调用点检查 `textarea.style.display`
+- 时间轴状态通过 `isTimelineLayout()` 从 `body.layout-timeline` 派生，没有额外的布尔标志
+- DOM id：卡片元素 id 就是 sticky id，其 textarea id 为 `${id}-input`
 
-Image reference format in markdown:
+Markdown 中的图片引用格式：
 
 - `![alt](sticky-image://<imageKey>)`
 
-Image key convention:
+图片 key 约定：
 
 - `[stickyID]-[imageID]`
 
-## 4. Persistence Model
+## 4. 持久化模型
 
 ### 4.1 IndexedDB
 
-- DB: `sticky-board-db`
-- Version: `1`
-- Store: `app-state` (`keyPath: key`)
-- Keys:
+- DB：`sticky-board-db`
+- Version：`1`
+- Store：`app-state`（`keyPath: key`）
+- Keys：
   - `stickys`
   - `stickyImages`
 
-Persisted values:
+持久化的值：
 
 - `stickys` => `Stickys`
 - `stickyImages` => `Record<string, Blob>`
 
-Connection and write policy:
+连接与写入策略：
 
-- `openAppDb()` caches the connection; transactions never close it (reset on
-  `versionchange`/`close`)
-- `updateSticky()` only mutates the in-memory model and calls `schedulePersistStickys()`
-- `schedulePersistStickys()` debounces writes by `PERSIST_DEBOUNCE_MS` (300ms), so
-  drag/resize moves and keystrokes do not trigger one IndexedDB transaction each
-- `flushPersistStickys()` writes immediately when a debounced write is pending; it runs
-  on `visibilitychange` (hidden) and `beforeunload`
-- ZIP import cancels the pending debounce and `await`s `persistStickys()` /
-  `persistImageStore()` before reloading
-- Image-store writes stay immediate because they only change on paste/cleanup/import
+- `openAppDb()` 会缓存连接；事务不会关闭连接（在 `versionchange`/`close` 时重置）
+- `updateSticky()` 只修改内存模型，并调用 `schedulePersistStickys()`
+- `schedulePersistStickys()` 按 `PERSIST_DEBOUNCE_MS`（300ms）防抖写入，因此拖拽/缩放移动和键盘输入不会各自触发一次 IndexedDB 事务
+- `flushPersistStickys()` 在存在待写入防抖任务时立即写入；它会在 `visibilitychange`（hidden）和 `beforeunload` 时运行
+- ZIP 导入会取消待执行的防抖任务，并在刷新前 `await` `persistStickys()` / `persistImageStore()`
+- 图片存储的写入保持立即执行，因为它只在粘贴/清理/导入时变化
 
 ### 4.2 localStorage
 
-Only setting key is stored in localStorage:
+localStorage 中只存储一个设置 key：
 
 - `sunnyThemeEnabled`
 
-No localStorage->IndexedDB migration remains in current code.
+当前代码中不再保留 localStorage -> IndexedDB 的迁移逻辑。
 
-## 5. Startup Sequence
+## 5. 启动流程
 
 ```mermaid
 sequenceDiagram
@@ -124,55 +120,53 @@ sequenceDiagram
   end
 ```
 
-Key functions:
+关键函数：
 
-- `bootstrap()` runs at the end of the module, after settings UI and helpers are set up
-- `bindGlobalEvents()` registers visibility, Escape and unload listeners
-- `initializeState()` loads storage, cleans images and renders cards
-- `getRequiredElement()` throws a descriptive error when `#root` or `#settings` is missing
+- `bootstrap()` 在模块末尾运行，此时设置 UI 和辅助函数已就绪
+- `bindGlobalEvents()` 注册 visibility、Escape 和 unload 监听
+- `initializeState()` 加载存储、清理图片并渲染卡片
+- `getRequiredElement()` 在 `#root` 或 `#settings` 缺失时抛出带说明的错误
 
-## 6. Rendering Pipeline
+## 6. 渲染管线
 
-### 6.1 Markdown Rendering
+### 6.1 Markdown 渲染
 
-Engine: `markdown-it` with:
+引擎：`markdown-it`，配置为：
 
 - `html: true`
 - `linkify: true`
 - `breaks: true`
 
-Custom rules:
+自定义规则：
 
-- Link rule: forces `target="_blank"` + `rel="noopener noreferrer"`
-- Image rule:
-  - If src starts with `sticky-image://`, lookup `imageStore[key]`
-  - Convert Blob -> Object URL (cached)
-  - If missing image, fallback alt to `[missing image]`
-- Fence / code_block rules: wrap code blocks into `.code-block` with a copy button
-  (see 6.4)
+- Link 规则：强制 `target="_blank"` + `rel="noopener noreferrer"`
+- Image 规则：
+  - 如果 src 以 `sticky-image://` 开头，则查询 `imageStore[key]`
+  - 把 Blob 转换为 Object URL（带缓存）
+  - 如果图片缺失，把 alt 回退为 `[missing image]`
+- Fence / code_block 规则：把代码块包装为带复制按钮的 `.code-block`
+  （见 6.4）
 
-### 6.2 Card Modes
+### 6.2 卡片模式
 
-- Edit mode: `textarea` visible
-- Preview mode: `.preview` visible (HTML from markdown)
-- `Escape` exits edit mode for any card still editing (needed when a maximized card
-  covers the whole canvas, so there is no blank area left to click)
-- Card chrome (`.card-actions`, top-right): edit/preview toggle + maximize/restore +
-  delete button
+- 编辑模式：`textarea` 可见
+- 预览模式：`.preview` 可见（由 Markdown 生成的 HTML）
+- `Escape` 会让仍处于编辑状态的卡片退出编辑模式（当最大化卡片铺满整个画布、没有空白区域可点击时需要）
+- 卡片控制区（`.card-actions`，右上角）：编辑/预览切换 + 最大化/还原 + 删除按钮
 
-Global click behavior:
+全局点击行为：
 
-- Click blank area (`#root` / `body`) => all cards switch to preview
-- On that same blank click, run `cleanupUnusedImages()`
+- 点击空白区域（`#root` / `body`）=> 所有卡片切换到预览模式
+- 在同一次空白点击中，运行 `cleanupUnusedImages()`
 
-### 6.3 Image Fullscreen Preview
+### 6.3 图片全屏预览
 
-- Clicking image inside preview opens modal overlay
-- Close by background click or `Escape`
+- 点击预览中的图片会打开模态遮罩层
+- 通过点击背景或 `Escape` 关闭
 
-### 6.4 Code Block Copy
+### 6.4 代码块复制
 
-Fenced blocks (```lang) and indented blocks render as:
+围栏代码块（```lang）与缩进代码块会渲染为：
 
 ```
 <div class="code-block">
@@ -181,169 +175,134 @@ Fenced blocks (```lang) and indented blocks render as:
 </div>
 ```
 
-- `.code-block` is a two-column grid: `pre` in `1 / 1`, the copy button in `1 / 2`,
-  and the tinted background/padding live on the wrapper, so the button sits outside the
-  scrolling area and never overlaps long or horizontally scrolled code
-- Code text is escaped with `md.utils.escapeHtml`; no syntax highlighter dependency
-- Copy handler is delegated on `.preview`, so it keeps working after `innerHTML` refresh
-- Button click calls `preventDefault()` + `stopPropagation()` to avoid opening image preview
-  or bringing the card to front
-- Clipboard: `navigator.clipboard.writeText`, falling back to a temporary `textarea`
-  + `document.execCommand("copy")` when the Clipboard API is unavailable (e.g. http)
-- Feedback: icon swaps to `LucideCopyCheck` and turns green (`#16a34a`), `.copied` plays
-  `copy-pop` for ~0.35s, then icon/label/color restore after 1.5s; timer per button is
-  kept in a `WeakMap`
-- `prefers-reduced-motion: reduce` disables the animation
+- `.code-block` 是两列 grid：`pre` 位于 `1 / 1`，复制按钮位于 `1 / 2`，带底色的背景和内边距位于包裹层上，因此按钮位于滚动区域之外，永远不会遮挡长代码或水平滚动的代码
+- 代码文本通过 `md.utils.escapeHtml` 转义；不引入语法高亮依赖
+- 复制处理逻辑委托在 `.preview` 上，因此 `innerHTML` 刷新后仍然有效
+- 按钮点击调用 `preventDefault()` + `stopPropagation()`，避免打开图片预览或把卡片置顶
+- 剪贴板：使用 `navigator.clipboard.writeText`，当 Clipboard API 不可用时（例如 http）回退到临时 `textarea` + `document.execCommand("copy")`
+- 反馈：图标切换为 `LucideCopyCheck` 并变绿（`#16a34a`），`.copied` 播放约 0.35s 的 `copy-pop` 动画，然后图标/标签/颜色在 1.5s 后恢复；每个按钮的 timer 保存在 `WeakMap` 中
+- `prefers-reduced-motion: reduce` 会禁用动画
 
-### 6.5 Card Actions and Maximize
+### 6.5 卡片操作按钮与最大化
 
-Buttons live in `.card-actions` inside the top border strip (`1.4rem` tall):
+按钮位于顶部边框条（高 `1.4rem`）内的 `.card-actions` 中：
 
-- `.card-edit-btn`: toggles edit/preview for that card. Shows `LucideSquarePen` while
-  previewing (click to edit) and `LucideEye` while editing (click to preview); label and
-  `aria-label` follow the action. `syncEditToggleButton()` re-syncs the icon whenever the
-  mode changes from elsewhere (right-click, Esc, blank-area click, initial render)
-- `.card-maximize-btn`: maximize/restore, icon swaps between `LucideMaximize` and
-  `LucideMinimize`, label between "最大化" and "还原" (localized)
-- `.card-close-btn`: delete with confirm, icon is `LucideX`
-- All three use the same `1.4rem` hit area as the code-block copy button; the close icon
-  is `1.3rem` and stays vertically centered in the top strip via flex
-  `align-items: center`
+- `.card-edit-btn`：切换该卡片的编辑/预览。预览时显示 `LucideSquarePen`（点击进入编辑），编辑时显示 `LucideEye`（点击进入预览）；label 和 `aria-label` 跟随动作变化。当模式从其他入口（右键、Esc、点击空白区域、初始渲染）变化时，`syncEditToggleButton()` 会重新同步图标
+- `.card-maximize-btn`：最大化/还原，图标在 `LucideMaximize` 和 `LucideMinimize` 之间切换，label 在"最大化"和"还原"之间切换（已本地化）
+- `.card-close-btn`：确认后删除，图标为 `LucideX`
+- 三个按钮与代码块复制按钮使用相同的 `1.4rem` 点击区域；关闭图标为 `1.3rem`，通过 flex 的 `align-items: center` 在顶部条中垂直居中
 
-Maximize behavior:
+最大化行为：
 
-- State is only the transient class `card-maximized`; nothing is added to the persisted
-  `Sticky` model, so a reload restores the saved `x/y/width/height`
-- CSS: `position: fixed`, `100dvw x 100dvh`, `transform: none !important`,
-  `z-index: 6100 !important` (above `#settings` at `6000`, below the image preview
-  overlay at `9999`), hidden `.resize`, larger `textarea`/`.preview` padding
-- Images in a maximized card are capped at `max-width: 50vw` instead of full width
-- Animation: `.card` transitions `all 0.2s ease-in-out`; `.card-maximized` keeps
-  `max-width: 100dvw` / `max-height: 100dvh` instead of `none`, so max constraints
-  interpolate together with width/height — `none` is not animatable and makes restore
-  snap to `50rem` before sliding. `body.move .card { transition: none }` disables
-  transitions during drag/resize so cards track the pointer without lag
-- Docked (timeline) cards need an extra step: they are flow-positioned with
-  `transform: none !important`, so the absolute/fixed switch is not animatable and the
-  card would jump to the viewport corner. `animateDockedMaximize()` temporarily limits
-  the inline transition to size properties, then delegates the position compensation to
-  `animateFlipFrom()`, the same FLIP helper used by timeline toggling. Free-layout cards
-  keep the simpler path because their `transform` interpolation already provides the
-  motion
-- Only one card can be maximized at a time; maximizing another card restores the previous one
-- While maximized, drag and resize listeners bail out via `isCardTransformLocked()`
-  (`isTimelineLayout() || .card-maximized`), so geometry stays untouched
-- Timeline mode keeps the same card chrome: `.layout-docked` shares the normal card
-  styles apart from `max-height: 20rem`, so maximize/delete buttons stay visible and
-  usable. It also hides the invisible `.resize` handle, so interact.js no longer
-  registers resize edges or sets the `nwse-resize` cursor
+- 状态只是临时 class `card-maximized`；不会写入持久化的 `Sticky` 模型，因此刷新后会恢复已保存的 `x/y/width/height`
+- CSS：`position: fixed`、`100dvw x 100dvh`、`transform: none !important`、`z-index: 6100 !important`（高于 `#settings` 的 `6000`，低于图片预览遮罩层的 `9999`），隐藏 `.resize`，增大 `textarea`/`.preview` 的内边距
+- 最大化卡片中的图片限制为 `max-width: 50vw`，而不是全宽
+- 动画：`.card` 过渡 `all 0.2s ease-in-out`；`.card-maximized` 保留 `max-width: 100dvw` / `max-height: 100dvh` 而不是 `none`，使 max 约束与 width/height 一起插值——`none` 不可动画，会导致还原时先跳到 `50rem` 再滑动。`body.move .card { transition: none }` 在拖拽/缩放期间禁用过渡，让卡片跟手且无延迟
+- 停靠态（时间轴）卡片需要额外一步：它们使用流式布局并带 `transform: none !important`，因此 absolute/fixed 切换不可动画，卡片会跳到视口角落。`animateDockedMaximize()` 先把内联 transition 限制为尺寸属性，再把位置补偿交给 `animateFlipFrom()`，也就是时间轴切换使用的同一个 FLIP 辅助函数。自由布局卡片保留更简单的路径，因为它们的 `transform` 插值已经提供运动效果
+- 同一时间只能最大化一张卡片；最大化另一张会还原前一张
+- 最大化期间，拖拽和缩放监听通过 `isCardTransformLocked()`（`isTimelineLayout() || .card-maximized`）直接退出，因此几何信息保持不变
+- 时间轴模式保留相同的卡片外观：`.layout-docked` 除 `max-height: 20rem` 外沿用普通卡片样式，因此最大化/删除按钮仍然可见可用。它还会隐藏不可见的 `.resize` 手柄，使 interact.js 不再注册缩放手柄边缘，也不再设置 `nwse-resize` 光标
 
-## 7. Interaction Model
+## 7. 交互模型
 
-### 7.1 Create Card by Dragging Empty Canvas
+### 7.1 在空白画布上拖拽创建卡片
 
-- `mousedown` on `#root` starts draw mode (only if target is root itself)
-- `mousemove` shows dashed shadow box
-- `mouseup` creates card if >= `MIN_CARD_SIZE_PX x MIN_CARD_SIZE_PX`
-- Dimensions are converted to rem via `/ REM_IN_PX`
-- During creation drag, `user-select` is disabled globally to prevent text selection artifacts
+- 在 `#root` 上 `mousedown` 进入绘制模式（仅当 target 是 root 本身）
+- `mousemove` 显示虚线阴影框
+- 当尺寸 >= `MIN_CARD_SIZE_PX x MIN_CARD_SIZE_PX` 时，`mouseup` 创建卡片
+- 尺寸通过 `/ REM_IN_PX` 转换为 rem
+- 创建拖拽期间全局禁用 `user-select`，避免文本选择产生的视觉残留
 
-### 7.2 Move/Resize Cards
+### 7.2 移动/缩放卡片
 
-Using `interactjs`:
+使用 `interactjs`：
 
-- Resize handle: `.resize`
-- Restrict edges to parent
-- Drag snap: `GRID_SIZE` grid
-- Drag restriction: within `#root`
-- On drag/resize start: `bringCardToFront()`
-- On move/end: `commitCardGeometry()` updates the model first, then projects
-  `x/y/width/height` onto the card
+- 缩放手柄：`.resize`
+- 将边缘限制在父容器内
+- 拖拽吸附：`GRID_SIZE` 网格
+- 拖拽限制：在 `#root` 内
+- 拖拽/缩放开始时：`bringCardToFront()`
+- 移动/结束时：`commitCardGeometry()` 先更新模型，再把 `x/y/width/height` 投影到卡片
 
-### 7.3 Edit Entry
+### 7.3 进入编辑
 
-- Right-click card enters edit mode (except delete button/resize handle)
-- `.card-edit-btn` in the top bar toggles edit/preview without needing a context menu
-- `setCardEditing(card, editing)` is the single implementation for both the top-bar
-  toggle and the click-on-empty-area preview action
-- Left click card brings it to top z-index
+- 右键卡片进入编辑模式（删除按钮/缩放手柄除外）
+- 顶栏 `.card-edit-btn` 无需右键菜单即可切换编辑/预览
+- `setCardEditing(card, editing)` 是顶栏切换和点击空白区域预览动作的唯一实现
+- 左键点击卡片会把它提升到最高 z-index
 
-### 7.4 Card Action Buttons
+### 7.4 卡片操作按钮
 
-- All three buttons are built by `createCardAction()` from an icon, label and handler
-- Buttons call `stopPropagation()`, so they never bring the card to front or start a drag
-- Maximize/restore keeps the saved geometry; delete re-renders the timeline when docked
+- 三个按钮都由 `createCardAction()` 根据图标、label 和 handler 构建
+- 按钮调用 `stopPropagation()`，因此不会把卡片置顶或启动拖拽
+- 最大化/还原会保留已保存的几何信息；停靠态删除会重新渲染时间轴
 
-## 8. Timeline Layout Mode
+## 8. 时间轴布局模式
 
-Toggle source: layout button in settings.
+切换入口：设置面板中的 layout 按钮。
 
-When enabled (`layout-timeline` class):
+启用时（`layout-timeline` class）：
 
-- Cards are grouped by day from ID timestamp prefix
-- Ordered newest-first
-- Timeline panel renders `date marker + card row`
-- Cards become `layout-docked` and arranged in flow layout
-- Root background dot pattern is removed
-- Timeline hint text is shown at top
+- 卡片按 ID 时间戳前缀分组到天
+- 按最新优先排序
+- 时间轴面板渲染 `date marker + card row`
+- 卡片变为 `layout-docked` 并按流式布局排列
+- 移除根背景点阵图案
+- 顶部显示时间轴提示文字
 
-Special interaction in timeline mode:
+时间轴模式下的特殊交互：
 
-- Double-click any card:
-  - exit timeline mode
-  - bring that card to top
-  - move it to viewport center (snapped to `GRID_SIZE`)
+- 双击任意卡片：
+  - 退出时间轴模式
+  - 把该卡片置顶
+  - 移动到视口中心（吸附到 `GRID_SIZE`）
 
-Toggle animation (`setLayoutMode` + `animateFlipFrom`):
+切换动画（`setLayoutMode` + `animateFlipFrom`）：
 
-- Capture each card's viewport rect before the layout change
-- Disable `transition` on cards, apply the docked/free layout, then measure new rects
-- Set a FLIP offset through the standalone `translate` property (independent of the
-  inline `transform` used for free positioning and of `.layout-docked`'s
-  `transform: none !important`)
-- On the next frame restore transitions and animate `translate` to `0 0`, so cards glide
-  from their old position to the new one in both directions
-- `animateFlipFrom()` is shared with docked maximize, so both transitions follow one
-  implementation
+- 布局变化前记录每张卡片的视口 rect
+- 禁用卡片的 `transition`，应用停靠/自由布局，然后测量新的 rect
+- 通过独立的 `translate` 属性设置 FLIP 偏移（独立于自由定位使用的内联 `transform`，也独立于 `.layout-docked` 的 `transform: none !important`）
+- 下一帧恢复 transition，并把 `translate` 动画到 `0 0`，使卡片在双向切换时都从旧位置滑向新位置
+- `animateFlipFrom()` 与停靠态最大化共用，因此两种过渡遵循同一套实现
 
-## 9. Image Lifecycle
+## 9. 图片生命周期
 
-### 9.1 Paste
+### 9.1 粘贴
 
-Inside textarea `paste` handler:
+在 textarea 的 `paste` 处理逻辑中：
 
-1. Extract first `image/*` clipboard item
-2. Enforce size limit (`MAX_PASTED_IMAGE_SIZE = 20MB`)
-3. Create image key and save Blob to `imageStore`
-4. Persist image store
-5. Insert markdown `![pasted-image](sticky-image://<key>)`
-6. Persist sticky text
+1. 提取第一个 `image/*` 剪贴板项
+2. 执行大小限制（`MAX_PASTED_IMAGE_SIZE = 20MB`）
+3. 创建图片 key，并把 Blob 保存到 `imageStore`
+4. 持久化图片存储
+5. 插入 Markdown `![pasted-image](sticky-image://<key>)`
+6. 持久化便签文本
 
-### 9.2 Cleanup Strategy
+### 9.2 清理策略
 
-`cleanupUnusedImages()` parses all markdown text for `sticky-image://` keys.
+`cleanupUnusedImages()` 会解析所有 Markdown 文本中的 `sticky-image://` key。
 
-- Unreferenced image keys are deleted from `imageStore`
-- Corresponding object URLs are revoked
-- Image store is persisted if changed
+- 未被引用的图片 key 会从 `imageStore` 中删除
+- 对应的 Object URL 会被 revoke
+- 如果有变化，则持久化图片存储
 
-Cleanup is intentionally triggered on blank-area click (preview switch), not on every edit keystroke.
+清理是有意放在点击空白区域（切换预览）时触发，而不是每次编辑按键时触发。
 
-## 10. ZIP Export Format
+## 10. ZIP 导出格式
 
-Trigger: Export button.
+触发方式：Export 按钮。
 
-File name:
+文件名：
 
 - `sticky-board-{Date.now()}.zip`
 
-Archive contents:
+归档内容：
 
-- `/{id}.md` for each sticky
-- `/images/{asset-id}.{ext}` for pasted images
+- `/{id}.md`，每个便签一个
+- `/images/{asset-id}.{ext}`，用于粘贴图片
 - `/sticky-board-config.json`
 
-`sticky-board-config.json` shape:
+`sticky-board-config.json` 结构：
 
 ```json
 {
@@ -352,15 +311,15 @@ Archive contents:
 }
 ```
 
-Export markdown rewrite:
+导出时 Markdown 重写：
 
 - `sticky-image://<key>` => `./images/<asset-id>.<ext>`
 
-Goal: extracted folder can be opened in VS Code and markdown preview can load images through relative paths.
+目标：解压后的文件夹可以直接在 VS Code 中打开，Markdown 预览可以通过相对路径加载图片。
 
-## 11. ZIP Import Behavior
+## 11. ZIP 导入行为
 
-Trigger: Import button (accepts `.zip`).
+触发方式：Import 按钮（接受 `.zip`）。
 
 ```mermaid
 flowchart TD
@@ -379,124 +338,121 @@ flowchart TD
   L --> M[reload]
 ```
 
-ID resolution rules:
+ID 解析规则：
 
-1. Try config path mapping (`path` in config)
-2. If no mapping, generate new ID from `Date.now()` base, incremented by `+100ms` per new file to avoid collisions
+1. 尝试配置路径映射（配置中的 `path`）
+2. 如果没有映射，则基于 `Date.now()` 生成新 ID，每个新文件递增 `+100ms` 以避免冲突
 
-Default layout for md without config:
+没有配置的 md 使用默认布局：
 
-- Slight offsets: `(10,10)`, `(20,20)`, `(30,30)` ...
-- Width/height defaults to `20/10`
-- zIndex increments from current max
+- 轻微偏移：`(10,10)`、`(20,20)`、`(30,30)` ...
+- Width/height 默认 `20/10`
+- zIndex 从当前最大值递增
 
-Imported config validation (`parseImportedConfig` + `normalizeImportedSticky`):
+导入配置校验（`parseImportedConfig` + `normalizeImportedSticky`）：
 
-- Entries must be objects with a string `path`; ids must match `[A-Za-z0-9_-]+`,
-  so `__proto__` and other unsafe keys are ignored
-- `x/y` are rounded, non-negative and capped at `MAX_IMPORTED_COORDINATE_PX`
-- `width/height` are rounded and clamped to `MIN_CARD_SIZE_REM`–`MAX_CARD_SIZE_REM`
-- `zIndex` is rounded and clamped to `1`–`MAX_IMPORTED_Z_INDEX`
-- Missing or non-finite numbers fall back to the generated default layout
-- Imported markdown text is forced to a string
+- 配置项必须是带字符串 `path` 的对象；id 必须匹配 `[A-Za-z0-9_-]+`，
+  因此 `__proto__` 和其他不安全 key 会被忽略
+- `x/y` 取整、非负，并限制在 `MAX_IMPORTED_COORDINATE_PX` 内
+- `width/height` 取整，并限制在 `MIN_CARD_SIZE_REM`–`MAX_CARD_SIZE_REM` 内
+- `zIndex` 取整，并限制在 `1`–`MAX_IMPORTED_Z_INDEX` 内
+- 缺失或非有限数字回退到生成的默认布局
+- 导入的 Markdown 文本强制为字符串
 
-If image file referenced by relative path is missing in zip:
+如果 zip 中缺少被相对路径引用的图片文件：
 
-- Leave original markdown image path untouched
+- 保持 Markdown 中原始图片路径不变
 
-## 12. Settings Panel
+## 12. 设置面板
 
-Settings items:
+设置项：
 
-- Sunny toggle
-- Export button
-- Import button
-- Layout toggle icon
-- Settings icon
-- GitHub link
+- Sunny 开关
+- Export 按钮
+- Import 按钮
+- Layout 切换图标
+- Settings 图标
+- GitHub 链接
 
-Expand/collapse behavior:
+展开/收起行为：
 
-- Staggered pop-in/pop-out animation
-- Bottom item appears first
-- Most actions auto-collapse settings after click/change
+- 交错 pop-in/pop-out 动画
+- 底部项最先出现
+- 大多数操作在点击/切换后自动收起设置面板
 
-## 13. Theming and Visual Layers
+## 13. 主题与视觉层级
 
-- Sunny overlay uses `leaves.mp4` as fixed full-screen video
-- Playback is paused/resumed by visibility state
-- Reduced motion media query disables overlay
-- Card/scrollbar/timeline styles are in `src/style.scss`
-- Layer order is centralized in `:root` custom properties:
+- Sunny 遮罩层使用 `leaves.mp4` 作为固定全屏视频
+- 播放会根据页面可见性状态暂停/恢复
+- `prefers-reduced-motion` 媒体查询会禁用遮罩层
+- 卡片/滚动条/时间轴样式位于 `src/style.scss`
+- 层级顺序集中定义在 `:root` 自定义属性中：
 
-| Variable | Value | Used by |
+| Variable | Value | 使用位置 |
 |---|---|---|
-| `--z-card` | 1 | Card base and docked cards |
-| `--z-card-control` | 10 | Card action bar and resize handle |
-| `--z-code-copy` | 1 | Copy button inside a code block |
-| `--z-creating-shadow` | 1000 | Drag-to-create shadow box |
-| `--z-sunny-overlay` | 4400 | Sunny video overlay |
-| `--z-settings` | 6000 | Settings panel |
-| `--z-card-maximized` | 6100 | Maximized card |
-| `--z-image-preview` | 9999 | Image preview overlay |
+| `--z-card` | 1 | 卡片基础层级和停靠态卡片 |
+| `--z-card-control` | 10 | 卡片操作栏和缩放手柄 |
+| `--z-code-copy` | 1 | 代码块内的复制按钮 |
+| `--z-creating-shadow` | 1000 | 拖拽创建时的阴影框 |
+| `--z-sunny-overlay` | 4400 | Sunny 视频遮罩层 |
+| `--z-settings` | 6000 | 设置面板 |
+| `--z-card-maximized` | 6100 | 最大化卡片 |
+| `--z-image-preview` | 9999 | 图片预览遮罩层 |
 
-- Dynamic card stacking is still the model `zIndex`; `applyCardGeometry()` sets it inline
+- 动态卡片堆叠仍使用模型中的 `zIndex`；`applyCardGeometry()` 会把它内联设置到卡片上
 
-## 13.1 Layout Constants
+## 13.1 布局常量
 
-`src/constants.ts` centralizes the numbers shared by interaction and persistence:
+`src/constants.ts` 集中定义交互和持久化共用的数字：
 
-| Constant | Value | Meaning |
+| Constant | Value | 含义 |
 |---|---|---|
-| `REM_IN_PX` | 16 | Pixels per rem assumed by layout math |
-| `GRID_SIZE` | 16 | Drag/creation snap step, matches the 1rem dot grid |
-| `MIN_CARD_SIZE_PX` | 160 | Minimum width/height for a newly created card |
-| `MIN_CARD_SIZE_REM` | 10 | Minimum imported card size |
-| `MAX_CARD_SIZE_REM` | 50 | Maximum imported card size, matches CSS |
-| `MAX_IMPORTED_COORDINATE_PX` | 100000 | Imported `x/y` cap |
-| `MAX_IMPORTED_Z_INDEX` | 999 | Imported `zIndex` cap |
-| `CREATE_DRAG_THRESHOLD_PX` | 5 | Pointer movement before the creation shadow appears |
-| `PERSIST_DEBOUNCE_MS` | 300 | Stickys write debounce |
-| `COPY_FEEDBACK_MS` | 1500 | Copy button success state duration |
-| `EDIT_FOCUS_DELAY_MS` | 200 | Delay before focusing a textarea |
-| `SETTINGS_ITEM_ANIMATION_STEP_MS` | 45 | Settings item stagger |
-| `SETTINGS_ITEM_ANIMATION_DURATION_MS` | 260 | Settings item duration |
+| `REM_IN_PX` | 16 | 布局计算假定的每 rem 像素数 |
+| `GRID_SIZE` | 16 | 拖拽/创建吸附步长，与 1rem 点阵一致 |
+| `MIN_CARD_SIZE_PX` | 160 | 新建卡片的最小 width/height |
+| `MIN_CARD_SIZE_REM` | 10 | 导入卡片的最小尺寸 |
+| `MAX_CARD_SIZE_REM` | 50 | 导入卡片的最大尺寸，与 CSS 一致 |
+| `MAX_IMPORTED_COORDINATE_PX` | 100000 | 导入 `x/y` 上限 |
+| `MAX_IMPORTED_Z_INDEX` | 999 | 导入 `zIndex` 上限 |
+| `CREATE_DRAG_THRESHOLD_PX` | 5 | 创建阴影出现前的指针移动距离 |
+| `PERSIST_DEBOUNCE_MS` | 300 | Stickys 写入防抖 |
+| `COPY_FEEDBACK_MS` | 1500 | 复制按钮成功状态持续时间 |
+| `EDIT_FOCUS_DELAY_MS` | 200 | textarea 聚焦前的延迟 |
+| `SETTINGS_ITEM_ANIMATION_STEP_MS` | 45 | 设置项交错间隔 |
+| `SETTINGS_ITEM_ANIMATION_DURATION_MS` | 260 | 设置项动画时长 |
 
-- `Sticky.x/y` stay in pixels; `Sticky.width/height` stay in rem
-- Conversions use `REM_IN_PX` and `GRID_SIZE` instead of bare literals
+- `Sticky.x/y` 保持像素单位；`Sticky.width/height` 保持 rem 单位
+- 换算使用 `REM_IN_PX` 和 `GRID_SIZE`，不再使用裸字面量
 
-## 14. Key Invariants
+## 14. 关键不变量
 
-- `sticky-image://` is the only internal image URI scheme
-- `imageStore` must be Blob-based in memory and IndexedDB
-- `bringCardToFront()` is the canonical z-index elevation path
-- Timeline mode and free-layout mode are mutually exclusive render states
-- Import persistence must finish (`await`) before page reload
+- `sticky-image://` 是唯一的内部图片 URI scheme
+- `imageStore` 在内存和 IndexedDB 中都必须基于 Blob
+- `bringCardToFront()` 是提升 z-index 的唯一规范路径
+- 时间轴模式和自由布局模式是互斥的渲染状态
+- 导入持久化必须在页面刷新前完成（`await`）
 
-## 15. Rebuild Order (Recommended)
+## 15. 重建顺序（建议）
 
-1. Core types and i18n text table
-2. IndexedDB adapter (`open/read/write`)
-3. Markdown renderer overrides
-4. Card factory + edit/preview toggle
-5. Paste image pipeline + image URI scheme
-6. Drag/create/move/resize interactions
-7. Settings panel + sunny theme + layout mode
-8. Image cleanup and object URL lifecycle
-9. ZIP export
-10. ZIP import (path mapping, fallback IDs/default layout)
-11. Startup bootstrap and final integration checks
+1. 核心类型与 i18n 文案表
+2. IndexedDB 适配层（`open/read/write`）
+3. Markdown 渲染器覆写
+4. 卡片工厂 + 编辑/预览切换
+5. 粘贴图片管线 + 图片 URI scheme
+6. 拖拽/创建/移动/缩放交互
+7. 设置面板 + Sunny 主题 + 布局模式
+8. 图片清理与 Object URL 生命周期
+9. ZIP 导出
+10. ZIP 导入（路径映射、回退 ID/默认布局）
+11. 启动 bootstrap 与最终集成检查
 
-## 16. Code Quality Gates
+## 16. 代码质量门禁
 
-- `lint:check` — ESLint flat config (`eslint.config.mjs`, `@eslint/js` + `typescript-eslint`)
-- `lint` — same as above with `--fix`
+- `lint:check` — ESLint flat config（`eslint.config.mjs`、`@eslint/js` + `typescript-eslint`）
+- `lint` — 同上，带 `--fix`
 - `typecheck` — `tsc -b`
 - `check` — `npm run lint:check && npm run typecheck`
-- `build` — `npm run check && vite build` (lint + types are enforced on deploy too)
-- `prepare` runs `husky`, which wires `.husky/pre-commit` to `npm run check` and
-  `npx lint-staged`
-- lint-staged runs `eslint --fix --no-warn-ignored` on staged `js/jsx/ts/tsx/mjs/cjs`
-  files, so lint errors block the commit while fixable issues are auto-fixed
-- Project scripts assume npm (`npm run <script>`) because that is what the deployment
-  environment uses
+- `build` — `npm run check && vite build`（部署时同样强制 lint + 类型检查）
+- `prepare` 运行 `husky`，把 `.husky/pre-commit` 接到 `npm run check` 和 `npx lint-staged`
+- lint-staged 对暂存的 `js/jsx/ts/tsx/mjs/cjs` 文件运行 `eslint --fix --no-warn-ignored`，因此 lint 错误会阻止提交，可自动修复的问题会被自动修复
+- 项目脚本假定使用 npm（`npm run <script>`），因为部署环境使用的是 npm
