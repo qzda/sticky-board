@@ -1,7 +1,7 @@
 # Sticky Board 分层设计审阅
 
 - 日期：2026-11-19
-- 范围：`src/main.ts`、`src/style.scss`、`index.html`、`docs/ARCHITECTURE.md`、构建与工具链配置
+- 范围：`src/main.ts`、`src/lib/`、`src/style.scss`、`index.html`、`docs/ARCHITECTURE.md`、构建与工具链配置
 - 性质：只读审阅，未修改任何业务代码
 - 结论：功能分层在概念上清楚（UI → 卡片交互 → 数据模型 → IndexedDB/ZIP），但物理上全部集中在 `main.ts`；部分调用链跨越了层级（指针事件直接触发 IndexedDB 写入），这是当前最值得改进的地方
 
@@ -17,8 +17,9 @@
 | P1-3 重复逻辑合并 | 已完成 | `e62ec19` |
 | P2-1 常量与层级魔法数字 | 已完成 | `9531df4` |
 | P2-2 导入数据校验 | 已完成 | `a425051` |
+| P2-5 测试与工具链 | 已完成 | `8934ffb` |
 
-尚未处理：P0-2（Markdown HTML 信任边界）、P2-3（错误提示）、P2-4（可访问性与小缺陷）、P2-5（测试与工具链）。
+尚未处理：P0-2（Markdown HTML 信任边界）、P2-3（错误提示）、P2-4（可访问性与小缺陷）。
 
 ## 1. 现状分层快照
 
@@ -111,10 +112,16 @@
 - 拖拽创建中途切到时间轴时没有 `finishCreateDragging()` 清理；按钮位于拖拽热区内，建议确认从按钮按下拖动是否会移动卡片（可在 `ignoreFrom` 里补 `.card-actions`）。
 - 时间轴下最大化后退出时间轴，卡片仍是 `card-maximized` 全屏态，建议确认是否符合预期并写进文档。
 
-### P2-5 测试与工具链
+### P2-5 测试与工具链（已完成）
 
 - 没有任何单元测试；`check` 只有 lint + 类型。ZIP 路径映射、图片引用清理、日期分组、导入归一化都是纯函数，适合抽到 `src/lib/` 后用 vitest 覆盖。
 - 仓库里还有 `pnpm-workspace.yaml`，`pnpm-lock.yaml` 被忽略，脚本却统一用 npm（`package.json:5`）。既然部署用 npm，建议清掉 pnpm 残留，避免下一位协作者装错依赖。
+
+处理结果：
+
+- 纯函数已抽到 `src/lib/`：`types`、`validation`、`images`、`zip`、`import-config`、`timeline`。
+- 新增 27 个 vitest 单元测试；`npm run check` 现在包含 `vitest run`。
+- 移除 `pnpm-workspace.yaml` 与 pnpm lockfile，改用并提交 `package-lock.json`。
 
 ## 3. 建议的目标结构
 
