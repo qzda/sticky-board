@@ -10,6 +10,18 @@ export const GRID_SIZE = REM_IN_PX;
 /** Minimum width and height of a card created by dragging, in pixels. */
 export const MIN_CARD_SIZE_PX = 10 * REM_IN_PX;
 
+/** Minimum card width/height accepted from an imported config, in rem. */
+export const MIN_CARD_SIZE_REM = MIN_CARD_SIZE_PX / REM_IN_PX;
+
+/** Maximum card width/height accepted from an imported config, in rem (CSS cap). */
+export const MAX_CARD_SIZE_REM = 50;
+
+/** Maximum `x`/`y` accepted from an imported config, in pixels. */
+export const MAX_IMPORTED_COORDINATE_PX = 100_000;
+
+/** Maximum `zIndex` accepted from an imported config. */
+export const MAX_IMPORTED_Z_INDEX = 999;
+
 /** Pointer movement before the creation shadow box appears, in pixels. */
 export const CREATE_DRAG_THRESHOLD_PX = 5;
 

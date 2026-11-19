@@ -390,6 +390,16 @@ Default layout for md without config:
 - Width/height defaults to `20/10`
 - zIndex increments from current max
 
+Imported config validation (`parseImportedConfig` + `normalizeImportedSticky`):
+
+- Entries must be objects with a string `path`; ids must match `[A-Za-z0-9_-]+`,
+  so `__proto__` and other unsafe keys are ignored
+- `x/y` are rounded, non-negative and capped at `MAX_IMPORTED_COORDINATE_PX`
+- `width/height` are rounded and clamped to `MIN_CARD_SIZE_REM`–`MAX_CARD_SIZE_REM`
+- `zIndex` is rounded and clamped to `1`–`MAX_IMPORTED_Z_INDEX`
+- Missing or non-finite numbers fall back to the generated default layout
+- Imported markdown text is forced to a string
+
 If image file referenced by relative path is missing in zip:
 
 - Leave original markdown image path untouched
@@ -441,6 +451,10 @@ Expand/collapse behavior:
 | `REM_IN_PX` | 16 | Pixels per rem assumed by layout math |
 | `GRID_SIZE` | 16 | Drag/creation snap step, matches the 1rem dot grid |
 | `MIN_CARD_SIZE_PX` | 160 | Minimum width/height for a newly created card |
+| `MIN_CARD_SIZE_REM` | 10 | Minimum imported card size |
+| `MAX_CARD_SIZE_REM` | 50 | Maximum imported card size, matches CSS |
+| `MAX_IMPORTED_COORDINATE_PX` | 100000 | Imported `x/y` cap |
+| `MAX_IMPORTED_Z_INDEX` | 999 | Imported `zIndex` cap |
 | `CREATE_DRAG_THRESHOLD_PX` | 5 | Pointer movement before the creation shadow appears |
 | `PERSIST_DEBOUNCE_MS` | 300 | Stickys write debounce |
 | `COPY_FEEDBACK_MS` | 1500 | Copy button success state duration |
