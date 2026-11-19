@@ -118,13 +118,19 @@ let stickys: Stickys = {};
 let imageStore: Record<string, Blob> = {};
 const imageUrlCache = new Map<string, string>();
 const cardElementMap = new Map<string, HTMLDivElement>();
+const PERSIST_DEBOUNCE_MS = 300;
+
+let dbPromise: Promise<IDBDatabase> | null = null;
 
 /**
  * Opens the IndexedDB database and creates stores on first run.
+ * The connection is cached and reused by later transactions.
  * @returns {Promise<IDBDatabase>} Open database handle.
  */
 function openAppDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  if (dbPromise) return dbPromise;
+
+  dbPromise = new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
       const db = request.result;
@@ -132,9 +138,24 @@ function openAppDb(): Promise<IDBDatabase> {
         db.createObjectStore(DB_STORE, { keyPath: "key" });
       }
     };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      db.onversionchange = () => {
+        db.close();
+        dbPromise = null;
+      };
+      db.onclose = () => {
+        dbPromise = null;
+      };
+      resolve(db);
+    };
+    request.onerror = () => {
+      dbPromise = null;
+      reject(request.error);
+    };
   });
+
+  return dbPromise;
 }
 
 /**
@@ -154,8 +175,7 @@ async function readPersistedValue<T>(key: string): Promise<T | undefined> {
       resolve((row?.value as T | undefined) ?? undefined);
     };
     request.onerror = () => reject(request.error);
-    tx.oncomplete = () => db.close();
-    tx.onabort = () => db.close();
+    tx.onabort = () => reject(tx.error);
   });
 }
 
@@ -171,18 +191,9 @@ async function writePersistedValue(key: string, value: unknown): Promise<void> {
     const tx = db.transaction(DB_STORE, "readwrite");
     const store = tx.objectStore(DB_STORE);
     store.put({ key, value } as PersistRecord);
-    tx.oncomplete = () => {
-      db.close();
-      resolve();
-    };
-    tx.onerror = () => {
-      db.close();
-      reject(tx.error);
-    };
-    tx.onabort = () => {
-      db.close();
-      reject(tx.error);
-    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
   });
 }
 
@@ -200,6 +211,49 @@ async function persistStickys(): Promise<void> {
  */
 async function persistImageStore(): Promise<void> {
   await writePersistedValue(DB_KEY_IMAGES, imageStore);
+}
+
+let persistStickysTimer: number | null = null;
+
+/**
+ * Schedules a debounced write of the stickys map.
+ * Geometry and text updates can fire many times per second, so writes are coalesced.
+ * @returns {void}
+ */
+function schedulePersistStickys(): void {
+  if (persistStickysTimer !== null) {
+    window.clearTimeout(persistStickysTimer);
+  }
+
+  persistStickysTimer = window.setTimeout(() => {
+    persistStickysTimer = null;
+    void persistStickys().catch((error) => {
+      console.error("[storage] failed to persist stickys", error);
+    });
+  }, PERSIST_DEBOUNCE_MS);
+}
+
+/**
+ * Cancels a pending debounced write without persisting.
+ * Used before an explicit awaited write (for example ZIP import).
+ * @returns {void}
+ */
+function cancelScheduledPersistStickys(): void {
+  if (persistStickysTimer === null) return;
+  window.clearTimeout(persistStickysTimer);
+  persistStickysTimer = null;
+}
+
+/**
+ * Writes stickys immediately when a debounced write is pending.
+ * @returns {void}
+ */
+function flushPersistStickys(): void {
+  if (persistStickysTimer === null) return;
+  cancelScheduledPersistStickys();
+  void persistStickys().catch((error) => {
+    console.error("[storage] failed to persist stickys", error);
+  });
 }
 
 /**
@@ -322,23 +376,21 @@ async function loadStateFromIndexedDb(): Promise<void> {
 }
 
 /**
- * Updates a sticky card and schedules persistence.
+ * Updates a sticky in memory and schedules a debounced persistence.
  * @param {string} id Sticky id.
  * @param {Partial<Sticky>} data Partial sticky patch.
  * @returns {void}
  */
-function save(id: string, data: Partial<Sticky>): void {
+function updateSticky(id: string, data: Partial<Sticky>): void {
   stickys[id] = {
     ...stickys[id],
     ...data,
   };
-  void persistStickys().catch((error) => {
-    console.error("[storage] failed to persist stickys", error);
-  });
+  schedulePersistStickys();
 }
 
 /**
- * Deletes a sticky card and persists state.
+ * Deletes a sticky card and schedules persistence.
  * @param {string} id Sticky id.
  * @returns {void}
  */
@@ -346,9 +398,7 @@ function deleteCard(id: string): void {
   delete stickys[id];
   cardElementMap.delete(id);
   cleanupUnusedImages();
-  void persistStickys().catch((error) => {
-    console.error("[storage] failed to persist stickys", error);
-  });
+  schedulePersistStickys();
 }
 
 const MAX_PASTED_IMAGE_SIZE = 20 * 1024 * 1024;
@@ -589,6 +639,9 @@ function ensureSunnyVideoOverlay(): void {
 
 document.addEventListener("visibilitychange", () => {
   syncSunnyVideoPlayback();
+  if (document.visibilityState === "hidden") {
+    flushPersistStickys();
+  }
 });
 
 // Esc 退出编辑模式（最大化铺满视口时无法点击空白处预览）
@@ -1034,7 +1087,7 @@ function createCard(
   textarea.value = text;
   textarea.addEventListener("input", (e) => {
     const target = e.target as HTMLTextAreaElement;
-    save(id, { text: target.value });
+    updateSticky(id, { text: target.value });
   });
   textarea.addEventListener("paste", async (e) => {
     const items = e.clipboardData?.items;
@@ -1065,7 +1118,7 @@ function createCard(
       const end = textarea.selectionEnd;
 
       textarea.setRangeText(markdownImage, start, end, "end");
-      save(id, { text: textarea.value });
+      updateSticky(id, { text: textarea.value });
       textarea.dispatchEvent(new Event("input", { bubbles: true }));
     } catch (error) {
       console.error(error);
@@ -1126,7 +1179,7 @@ function createCard(
   toggleEditMode(card, isEditing);
 
   // 保存初始状态
-  save(id, {
+  updateSticky(id, {
     zIndex,
     width,
     height,
@@ -1323,7 +1376,7 @@ function bringCardToFront(card: HTMLElement): void {
 
   const id = card.getAttribute("id");
   if (id) {
-    save(id, { zIndex: maxZIndex });
+    updateSticky(id, { zIndex: maxZIndex });
   }
 }
 
@@ -1344,7 +1397,7 @@ function moveCardToViewportCenter(card: HTMLElement): void {
 
   const id = card.getAttribute("id");
   if (id) {
-    save(id, { x, y });
+    updateSticky(id, { x, y });
   }
 }
 
@@ -1369,6 +1422,7 @@ async function initializeState(): Promise<void> {
 void initializeState();
 
 window.addEventListener("beforeunload", () => {
+  flushPersistStickys();
   revokeAllImageUrls();
 });
 
@@ -1885,6 +1939,7 @@ uploadAction.addEventListener("click", () => {
           stickys = mergedStickys;
           imageStore = mergedImages;
           cleanupUnusedImages();
+          cancelScheduledPersistStickys();
           await persistStickys();
           await persistImageStore();
           location.reload();
@@ -1940,7 +1995,7 @@ interact(".card")
 
         const id = target.getAttribute("id");
         if (id) {
-          save(id, { width, height });
+          updateSticky(id, { width, height });
         }
       },
     },
@@ -1986,7 +2041,7 @@ interact(".card")
 
         const id = target.getAttribute("id");
         if (id) {
-          save(id, { x, y });
+          updateSticky(id, { x, y });
         }
       },
 
@@ -2003,7 +2058,7 @@ interact(".card")
 
         const id = target.getAttribute("id");
         if (id) {
-          save(id, { x, y });
+          updateSticky(id, { x, y });
         }
       },
     },

@@ -76,6 +76,19 @@ Persisted values:
 - `stickys` => `Stickys`
 - `stickyImages` => `Record<string, Blob>`
 
+Connection and write policy:
+
+- `openAppDb()` caches the connection; transactions never close it (reset on
+  `versionchange`/`close`)
+- `updateSticky()` only mutates the in-memory model and calls `schedulePersistStickys()`
+- `schedulePersistStickys()` debounces writes by `PERSIST_DEBOUNCE_MS` (300ms), so
+  drag/resize moves and keystrokes do not trigger one IndexedDB transaction each
+- `flushPersistStickys()` writes immediately when a debounced write is pending; it runs
+  on `visibilitychange` (hidden) and `beforeunload`
+- ZIP import cancels the pending debounce and `await`s `persistStickys()` /
+  `persistImageStore()` before reloading
+- Image-store writes stay immediate because they only change on paste/cleanup/import
+
 ### 4.2 localStorage
 
 Only setting key is stored in localStorage:
