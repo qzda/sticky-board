@@ -4,7 +4,6 @@ logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
@@ -24,4 +23,3 @@ dist-ssr
 *.sw?
 bun.lock
 tsconfig.tsbuildinfo
-pnpm-lock.yaml

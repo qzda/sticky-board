@@ -1,6 +1,6 @@
 # Sticky Board 架构
 
-本文档反映 `src/main.ts` 与 `src/style.scss` 的当前实现。
+本文档反映 `src/main.ts`、`src/lib/` 与 `src/style.scss` 的当前实现。
 编写目标是让工程师（或 AI）能以尽可能少的歧义重建应用行为。
 
 ## 1. 系统概览
@@ -22,6 +22,7 @@ Sticky Board 是一个纯浏览器端的便签应用，包含：
 ```mermaid
 flowchart LR
   UI[DOM / Events] --> CORE[src/main.ts]
+  CORE --> LIB[src/lib pure helpers]
   CORE --> MD[markdown-it renderer]
   CORE --> IJS[interactjs drag/resize]
   CORE --> DB[(IndexedDB: app-state)]
@@ -358,6 +359,7 @@ ID 解析规则：
 - `zIndex` 取整，并限制在 `1`–`MAX_IMPORTED_Z_INDEX` 内
 - 缺失或非有限数字回退到生成的默认布局
 - 导入的 Markdown 文本强制为字符串
+- 查找前会规范化 ZIP 路径：反斜杠转为斜杠，并解析 `.` / `..` 段
 
 如果 zip 中缺少被相对路径引用的图片文件：
 
@@ -451,8 +453,13 @@ ID 解析规则：
 - `lint:check` — ESLint flat config（`eslint.config.mjs`、`@eslint/js` + `typescript-eslint`）
 - `lint` — 同上，带 `--fix`
 - `typecheck` — `tsc -b`
-- `check` — `npm run lint:check && npm run typecheck`
-- `build` — `npm run check && vite build`（部署时同样强制 lint + 类型检查）
+- `test` — `vitest run`，运行 `src/lib/**/*.test.ts`
+- `test:watch` — `vitest` 监听模式
+- `check` — `npm run lint:check && npm run typecheck && npm run test`
+- `build` — `npm run check && vite build`（部署时同样强制 lint、类型检查与单元测试）
+- 纯函数集中在 `src/lib/`，测试与实现同目录；`vitest` 仅作为 devDependency，
+  不进入生产 bundle，也不读取便签、图片或 IndexedDB 数据
 - `prepare` 运行 `husky`，把 `.husky/pre-commit` 接到 `npm run check` 和 `npx lint-staged`
 - lint-staged 对暂存的 `js/jsx/ts/tsx/mjs/cjs` 文件运行 `eslint --fix --no-warn-ignored`，因此 lint 错误会阻止提交，可自动修复的问题会被自动修复
-- 项目脚本假定使用 npm（`npm run <script>`），因为部署环境使用的是 npm
+- 项目脚本假定使用 npm（`npm run <script>`），因为部署环境使用的是 npm；
+  仓库不再保留 pnpm workspace 或 pnpm lockfile

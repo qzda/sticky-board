@@ -20,16 +20,32 @@ import {
   CREATE_DRAG_THRESHOLD_PX,
   EDIT_FOCUS_DELAY_MS,
   GRID_SIZE,
-  MAX_CARD_SIZE_REM,
-  MAX_IMPORTED_COORDINATE_PX,
-  MAX_IMPORTED_Z_INDEX,
   MIN_CARD_SIZE_PX,
-  MIN_CARD_SIZE_REM,
   PERSIST_DEBOUNCE_MS,
   REM_IN_PX,
   SETTINGS_ITEM_ANIMATION_DURATION_MS,
   SETTINGS_ITEM_ANIMATION_STEP_MS,
 } from "./constants";
+import {
+  collectReferencedImageKeys,
+  IMAGE_SRC_PREFIX,
+} from "./lib/images";
+import {
+  normalizeImportedSticky,
+  parseImportedConfig,
+} from "./lib/import-config";
+import type { ImportedConfigMap } from "./lib/import-config";
+import { groupStickysByDay } from "./lib/timeline";
+import type { Stickys, Sticky } from "./lib/types";
+import { isRecord } from "./lib/validation";
+import {
+  getBlobExtension,
+  isExternalImagePath,
+  MARKDOWN_IMAGE_PATTERN,
+  normalizeZipPath,
+  resolveZipImagePath,
+  toZipMarkdown,
+} from "./lib/zip";
 
 /**
  * Detects UI language from browser locale.
@@ -90,27 +106,7 @@ const texts = {
 
 const t = texts[getLanguage()];
 
-type Stickys = Record<string, Sticky>;
-
-type Sticky = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  zIndex: number;
-  text: string;
-};
-
 type CardGeometry = Pick<Sticky, "x" | "y" | "width" | "height" | "zIndex">;
-
-/**
- * Checks whether a value is a plain object record.
- * @param {unknown} value The value to validate.
- * @returns {value is Record<string, unknown>} True when value is a non-null object and not an array.
- */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /**
  * Returns a required DOM element, throwing a descriptive error when missing.
@@ -127,10 +123,6 @@ function getRequiredElement<T extends Element>(selector: string): T {
 }
 
 const defaultText = t.defaultText;
-const IMAGE_SRC_PREFIX = "sticky-image://";
-const IMAGE_KEY_PATTERN = /!\[[^\]]*]\(sticky-image:\/\/([a-zA-Z0-9_-]+)\)/g;
-const MARKDOWN_IMAGE_PATTERN = /!\[([^\]]*)\]\(([^)]+)\)/g;
-const IMPORT_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const SUNNY_THEME_STORAGE_KEY = "sunnyThemeEnabled";
 const DB_NAME = "sticky-board-db";
 const DB_VERSION = 1;
@@ -145,8 +137,6 @@ type PersistRecord = {
 
 type StickyConfigEntry = Omit<Sticky, "text"> & { path: string };
 type StickyConfigMap = Record<string, StickyConfigEntry>;
-type ImportedConfigEntry = { path: string } & Record<string, unknown>;
-type ImportedConfigMap = Record<string, ImportedConfigEntry>;
 
 let stickys: Stickys = {};
 let imageStore: Record<string, Blob> = {};
@@ -506,52 +496,6 @@ function createImageKey(stickyId: string): string {
 }
 
 /**
- * Normalizes zip-relative paths for stable matching.
- * @param {string} path Raw path.
- * @returns {string} Normalized relative path without leading ./ or /.
- */
-function normalizeZipPath(path: string): string {
-  return path.replace(/\\/g, "/").replace(/^\.?\//, "");
-}
-
-/**
- * Returns a file extension guess for a blob MIME type.
- * @param {Blob} blob Image blob.
- * @returns {string} File extension without dot.
- */
-function getBlobExtension(blob: Blob): string {
-  const mime = blob.type.toLowerCase();
-  if (mime === "image/jpeg") return "jpg";
-  if (mime === "image/png") return "png";
-  if (mime === "image/webp") return "webp";
-  if (mime === "image/gif") return "gif";
-  if (mime === "image/svg+xml") return "svg";
-  if (mime === "image/bmp") return "bmp";
-  if (mime === "image/avif") return "avif";
-  return "bin";
-}
-
-/**
- * Rewrites sticky-image links to relative image paths for zip export.
- * @param {string} text Markdown text.
- * @param {Record<string, string>} imagePathByKey Image path map by key.
- * @returns {string} Rewritten markdown.
- */
-function toZipMarkdown(
-  text: string,
-  imagePathByKey: Record<string, string>,
-): string {
-  return text.replace(MARKDOWN_IMAGE_PATTERN, (full, alt, rawPath) => {
-    const path = String(rawPath).trim();
-    if (!path.startsWith(IMAGE_SRC_PREFIX)) return full;
-    const imageKey = path.slice(IMAGE_SRC_PREFIX.length);
-    const mapped = imagePathByKey[imageKey];
-    if (!mapped) return full;
-    return `![${alt}](${mapped})`;
-  });
-}
-
-/**
  * Rewrites relative markdown image paths from zip into sticky-image links.
  * If image file is not found in zip, keeps original path unchanged.
  * @param {string} text Markdown text.
@@ -567,7 +511,6 @@ async function fromZipMarkdown(
   stickyId: string,
 ): Promise<{ text: string; images: Record<string, Blob> }> {
   const importedImages: Record<string, Blob> = {};
-  const mdDir = normalizeZipPath(mdPath).split("/").slice(0, -1).join("/");
   let rewritten = text;
   let localSeq = 0;
   const matches = [...text.matchAll(MARKDOWN_IMAGE_PATTERN)];
@@ -575,17 +518,11 @@ async function fromZipMarkdown(
     const full = match[0];
     const alt = match[1];
     const rawPath = match[2].trim();
-    if (
-      rawPath.startsWith("http://") ||
-      rawPath.startsWith("https://") ||
-      rawPath.startsWith("data:") ||
-      rawPath.startsWith(IMAGE_SRC_PREFIX)
-    ) {
+    if (isExternalImagePath(rawPath)) {
       continue;
     }
 
-    const combined = mdDir ? `${mdDir}/${rawPath}` : rawPath;
-    const resolvedPath = normalizeZipPath(combined);
+    const resolvedPath = resolveZipImagePath(mdPath, rawPath);
     const zipFile = zip.file(resolvedPath);
     if (!zipFile) continue;
 
@@ -601,32 +538,13 @@ async function fromZipMarkdown(
 }
 
 /**
- * Extracts image keys referenced in markdown text.
- * @param {string} text Markdown text.
- * @returns {Set<string>} Referenced image key set.
- */
-function extractReferencedImageKeys(text: string): Set<string> {
-  const keys = new Set<string>();
-  IMAGE_KEY_PATTERN.lastIndex = 0;
-  let match = IMAGE_KEY_PATTERN.exec(text);
-  while (match) {
-    keys.add(match[1]);
-    match = IMAGE_KEY_PATTERN.exec(text);
-  }
-  return keys;
-}
-
-/**
  * Collects all referenced image keys across all stickys.
  * @returns {Set<string>} Global referenced image key set.
  */
 function getAllReferencedImageKeys(): Set<string> {
-  const allKeys = new Set<string>();
-  Object.values(stickys).forEach((sticky) => {
-    const keys = extractReferencedImageKeys(sticky.text || "");
-    keys.forEach((key) => allKeys.add(key));
-  });
-  return allKeys;
+  return collectReferencedImageKeys(
+    Object.values(stickys).map((sticky) => sticky.text || ""),
+  );
 }
 
 /**
@@ -1427,110 +1345,6 @@ document.body.addEventListener("click", (e) => {
 });
 
 /**
- * Parses a finite number from an unknown value.
- * @param {unknown} value Raw value.
- * @param {number} fallback Value used when parsing fails.
- * @returns {number} Finite number.
- */
-function toFiniteNumber(value: unknown, fallback: number): number {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim() !== "") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return fallback;
-}
-
-/**
- * Clamps a number into an inclusive range.
- * @param {number} value Input value.
- * @param {number} min Lower bound.
- * @param {number} max Upper bound.
- * @returns {number} Clamped value.
- */
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
-/**
- * Normalizes an imported layout entry.
- * Values are finite integers, sizes stay within the CSS card limits and
- * coordinates are non-negative and capped to a sane maximum.
- * @param {ImportedConfigEntry | undefined} cfg Imported config entry.
- * @param {Omit<Sticky, "text">} defaults Fallback layout.
- * @returns {Omit<Sticky, "text">} Normalized layout.
- */
-function normalizeImportedLayout(
-  cfg: ImportedConfigEntry | undefined,
-  defaults: Omit<Sticky, "text">,
-): Omit<Sticky, "text"> {
-  const source: Record<string, unknown> = cfg ?? {};
-  return {
-    x: clampNumber(
-      Math.round(toFiniteNumber(source.x, defaults.x)),
-      0,
-      MAX_IMPORTED_COORDINATE_PX,
-    ),
-    y: clampNumber(
-      Math.round(toFiniteNumber(source.y, defaults.y)),
-      0,
-      MAX_IMPORTED_COORDINATE_PX,
-    ),
-    width: clampNumber(
-      Math.round(toFiniteNumber(source.width, defaults.width)),
-      MIN_CARD_SIZE_REM,
-      MAX_CARD_SIZE_REM,
-    ),
-    height: clampNumber(
-      Math.round(toFiniteNumber(source.height, defaults.height)),
-      MIN_CARD_SIZE_REM,
-      MAX_CARD_SIZE_REM,
-    ),
-    zIndex: clampNumber(
-      Math.round(toFiniteNumber(source.zIndex, defaults.zIndex)),
-      1,
-      MAX_IMPORTED_Z_INDEX,
-    ),
-  };
-}
-
-/**
- * Builds a validated sticky from an imported config and markdown text.
- * @param {ImportedConfigEntry | undefined} cfg Imported config entry.
- * @param {Omit<Sticky, "text">} defaults Fallback layout.
- * @param {unknown} text Imported markdown text.
- * @returns {Sticky} Normalized sticky.
- */
-function normalizeImportedSticky(
-  cfg: ImportedConfigEntry | undefined,
-  defaults: Omit<Sticky, "text">,
-  text: unknown,
-): Sticky {
-  return {
-    ...normalizeImportedLayout(cfg, defaults),
-    text: typeof text === "string" ? text : "",
-  };
-}
-
-/**
- * Validates parsed sticky-board-config.json content.
- * Entries with unsafe ids or a missing path are ignored.
- * @param {unknown} parsed Parsed JSON value.
- * @returns {ImportedConfigMap} Validated config entries.
- */
-function parseImportedConfig(parsed: unknown): ImportedConfigMap {
-  if (!isRecord(parsed)) return {};
-
-  const config: ImportedConfigMap = {};
-  Object.entries(parsed).forEach(([id, value]) => {
-    if (!IMPORT_ID_PATTERN.test(id)) return;
-    if (!isRecord(value) || typeof value.path !== "string") return;
-    config[id] = { ...value, path: value.path };
-  });
-  return config;
-}
-
-/**
  * Returns current maximum z-index across all stickys.
  * @returns {number} Maximum z-index value.
  */
@@ -1811,30 +1625,6 @@ function setSettingsExpanded(expanded: boolean): void {
 }
 
 /**
- * Parses creation timestamp from sticky id.
- * @param {string} id Sticky id.
- * @returns {number} Unix timestamp in ms. Falls back to 0 when invalid.
- */
-function getStickyTimestamp(id: string): number {
-  const firstSegment = id.split("-")[0];
-  const ts = Number(firstSegment);
-  return Number.isFinite(ts) ? ts : 0;
-}
-
-/**
- * Formats a timestamp into date key (YYYY-MM-DD).
- * @param {number} timestamp Unix timestamp in ms.
- * @returns {string} Date key.
- */
-function getDateKey(timestamp: number): string {
-  const date = new Date(timestamp);
-  const y = date.getFullYear();
-  const m = `${date.getMonth() + 1}`.padStart(2, "0");
-  const d = `${date.getDate()}`.padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-/**
  * Ensures layout mode panel exists.
  * @returns {void}
  */
@@ -1875,17 +1665,7 @@ function renderTimelineLayout(): void {
   hint.textContent = t.timelineHint;
   layoutPanel.appendChild(hint);
 
-  const entries = Object.keys(stickys).sort(
-    (a, b) => getStickyTimestamp(b) - getStickyTimestamp(a),
-  );
-  const grouped = new Map<string, string[]>();
-  entries.forEach((id) => {
-    const key = getDateKey(getStickyTimestamp(id));
-    if (!grouped.has(key)) grouped.set(key, []);
-    grouped.get(key)!.push(id);
-  });
-
-  grouped.forEach((ids, day) => {
+  groupStickysByDay(stickys).forEach(({ day, ids }) => {
     const group = document.createElement("div");
     group.className = "layout-day-group";
 

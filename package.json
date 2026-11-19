@@ -10,7 +10,9 @@
     "lint": "eslint . --fix",
     "lint:check": "eslint .",
     "typecheck": "tsc -b",
-    "check": "npm run lint:check && npm run typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run lint:check && npm run typecheck && npm run test",
     "prepare": "husky"
   },
   "dependencies": {
@@ -27,7 +29,8 @@
     "sass": "^1.93.2",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.72.2",
-    "vite": "^7.2.7"
+    "vite": "^7.2.7",
+    "vitest": "^5.1.1"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,mjs,cjs}": "eslint --fix --no-warn-ignored"
