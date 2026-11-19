@@ -7,7 +7,7 @@
 
 ## 0. 处理进度
 
-以下条目已完成实现、浏览器验证、`npm run check` 验证，并同步更新 `docs/ARCHITECTURE.md`：
+以下条目已完成实现、浏览器验证、`check` 验证，并同步更新 `docs/ARCHITECTURE.md`：
 
 | 条目 | 状态 | 提交 |
 |---|---|---|
@@ -120,8 +120,9 @@
 处理结果：
 
 - 纯函数已抽到 `src/lib/`：`types`、`validation`、`images`、`zip`、`import-config`、`timeline`。
-- 新增 27 个 vitest 单元测试；`npm run check` 现在包含 `vitest run`。
-- 移除 `pnpm-workspace.yaml` 与 pnpm lockfile，改用并提交 `package-lock.json`。
+- 新增 27 个 vitest 单元测试；`pnpm check` 现在包含 `vitest run`。
+- 统一为 pnpm：提交 `pnpm-lock.yaml`，保留 `pnpm-workspace.yaml` 的 `allowBuilds`，移除 `package-lock.json`。
+- 新增 `netlify.toml`，Netlify 使用 `pnpm build` 并发布 `dist`。
 
 ## 3. 建议的目标结构
 

@@ -118,11 +118,11 @@ Sticky Board 默认纯本地。便签文本和粘贴图片可能包含用户隐�
 默认验证优先运行：
 
 ```bash
-npm run build
+pnpm build
 ```
 
 如果当前任务或用户明确使用其他包管理器，则使用与当前工作流一致的等价命令。
-需要只跑校验或单元测试时，使用 `npm run check` 或 `npm run test`。
+需要只跑校验或单元测试时，使用 `pnpm check` 或 `pnpm test`。
 
 涉及交互或浏览器行为时，应优先验证：
 

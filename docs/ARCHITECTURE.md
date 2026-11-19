@@ -455,11 +455,13 @@ ID 解析规则：
 - `typecheck` — `tsc -b`
 - `test` — `vitest run`，运行 `src/lib/**/*.test.ts`
 - `test:watch` — `vitest` 监听模式
-- `check` — `npm run lint:check && npm run typecheck && npm run test`
-- `build` — `npm run check && vite build`（部署时同样强制 lint、类型检查与单元测试）
+- `check` — `pnpm run lint:check && pnpm run typecheck && pnpm run test`
+- `build` — `pnpm run check && vite build`（部署时同样强制 lint、类型检查与单元测试）
 - 纯函数集中在 `src/lib/`，测试与实现同目录；`vitest` 仅作为 devDependency，
   不进入生产 bundle，也不读取便签、图片或 IndexedDB 数据
-- `prepare` 运行 `husky`，把 `.husky/pre-commit` 接到 `npm run check` 和 `npx lint-staged`
+- `prepare` 运行 `husky`，把 `.husky/pre-commit` 接到 `pnpm run check` 和
+  `pnpm exec lint-staged`
 - lint-staged 对暂存的 `js/jsx/ts/tsx/mjs/cjs` 文件运行 `eslint --fix --no-warn-ignored`，因此 lint 错误会阻止提交，可自动修复的问题会被自动修复
-- 项目脚本假定使用 npm（`npm run <script>`），因为部署环境使用的是 npm；
-  仓库不再保留 pnpm workspace 或 pnpm lockfile
+- 项目统一使用 pnpm，并提交 `pnpm-lock.yaml`；`pnpm-workspace.yaml` 只用于
+  `allowBuilds`（`esbuild`、`@parcel/watcher`）
+- Netlify 由 `netlify.toml` 驱动：`pnpm build`、发布 `dist`、Node 24
