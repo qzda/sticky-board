@@ -649,6 +649,7 @@ function ensureImagePreviewOverlay(): void {
 
   imagePreviewElement = document.createElement("img");
   imagePreviewElement.className = "image-preview-image";
+  imagePreviewElement.referrerPolicy = "no-referrer";
 
   imagePreviewOverlay.appendChild(imagePreviewElement);
   imagePreviewOverlay.addEventListener("click", (e) => {
@@ -758,12 +759,18 @@ md.renderer.rules.code_block = (tokens, idx) => {
 };
 
 /**
- * Renders markdown text to HTML.
+ * Renders Markdown into a card preview.
+ * @param {HTMLElement} preview Preview element.
  * @param {string} text Markdown source.
- * @returns {string} Rendered HTML.
  */
-function textToHtml(text: string): string {
-  return md.render(text);
+function renderPreview(preview: HTMLElement, text: string): void {
+  // Set the policy in inert template content before any image can load.
+  const template = document.createElement("template");
+  template.innerHTML = md.render(text);
+  template.content.querySelectorAll("img").forEach((image) => {
+    image.setAttribute("referrerpolicy", "no-referrer");
+  });
+  preview.replaceChildren(template.content);
 }
 
 const copyResetTimers = new WeakMap<HTMLButtonElement, number>();
@@ -959,7 +966,7 @@ function setCardEditing(card: HTMLElement, isEditing: boolean): void {
   textarea.style.display = isEditing ? "block" : "none";
   preview.style.display = isEditing ? "none" : "block";
   if (!isEditing) {
-    preview.innerHTML = textToHtml(textarea.value);
+    renderPreview(preview, textarea.value);
   }
 
   syncEditToggleButton(card);
@@ -1134,7 +1141,7 @@ function createCard(
   // 创建预览区域
   const preview = document.createElement("div");
   preview.className = "preview";
-  preview.innerHTML = textToHtml(textarea.value);
+  renderPreview(preview, textarea.value);
   preview.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
     const copyButton = target.closest<HTMLButtonElement>(".copy-code-btn");

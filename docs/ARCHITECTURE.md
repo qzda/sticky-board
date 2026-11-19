@@ -140,6 +140,9 @@ sequenceDiagram
 
 自定义规则：
 
+- `renderPreview()` 先在惰性的 `<template>` 中解析渲染结果，为其中的 `<img>`（包括 Markdown 图片和原样 HTML 图片）统一设置 `referrerpolicy="no-referrer"`，再插入预览区域。全屏图片预览也在设置 `src` 前应用同样的策略。
+- 外部图片仍会向其来源发起请求，图片请求省略 `Referer` 请求头。`html: true` 保留原样 HTML 支持，请仅导入可信来源的 Markdown 和 ZIP。
+
 - Link 规则：强制 `target="_blank"` + `rel="noopener noreferrer"`
 - Image 规则：
   - 如果 src 以 `sticky-image://` 开头，则查询 `imageStore[key]`
@@ -178,7 +181,7 @@ sequenceDiagram
 
 - `.code-block` 是两列 grid：`pre` 位于 `1 / 1`，复制按钮位于 `1 / 2`，带底色的背景和内边距位于包裹层上，因此按钮位于滚动区域之外，永远不会遮挡长代码或水平滚动的代码
 - 代码文本通过 `md.utils.escapeHtml` 转义；不引入语法高亮依赖
-- 复制处理逻辑委托在 `.preview` 上，因此 `innerHTML` 刷新后仍然有效
+- 复制处理逻辑委托在 `.preview` 上，因此替换预览内容后仍然有效
 - 按钮点击调用 `preventDefault()` + `stopPropagation()`，避免打开图片预览或把卡片置顶
 - 剪贴板：使用 `navigator.clipboard.writeText`，当 Clipboard API 不可用时（例如 http）回退到临时 `textarea` + `document.execCommand("copy")`
 - 反馈：图标切换为 `LucideCopyCheck` 并变绿（`#16a34a`），`.copied` 播放约 0.35s 的 `copy-pop` 动画，然后图标/标签/颜色在 1.5s 后恢复；每个按钮的 timer 保存在 `WeakMap` 中
