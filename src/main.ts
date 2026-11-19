@@ -63,6 +63,11 @@ const texts = {
     importConfirm: (importCount: number, existingIds: number, newIds: number) =>
       `发现 ${importCount} 个便签：\n- ${existingIds} 个现有便签将被更新\n- ${newIds} 个新便签将被添加\n\n继续？`,
     parseFailed: "解析 JSON 文件失败",
+    saveFailed: "保存失败，更改可能丢失",
+    initFailed: "加载失败，便签可能无法显示",
+    retry: "重试",
+    retrying: "重试中…",
+    dismiss: "关闭",
     sunnyTheme: "Sunny",
     layoutMode: "时间轴布局",
     exportLabel: "导出",
@@ -87,6 +92,11 @@ const texts = {
     importConfirm: (importCount: number, existingIds: number, newIds: number) =>
       `Found ${importCount} note(s):\n- ${existingIds} existing note(s) will be updated\n- ${newIds} new note(s) will be added\n\nContinue?`,
     parseFailed: "Failed to parse JSON file",
+    saveFailed: "Failed to save, changes may be lost",
+    initFailed: "Failed to load, notes may not display",
+    retry: "Retry",
+    retrying: "Retrying…",
+    dismiss: "Dismiss",
     sunnyTheme: "Sunny",
     layoutMode: "Timeline layout",
     exportLabel: "Export",
@@ -123,6 +133,125 @@ function getRequiredElement<T extends Element>(selector: string): T {
     throw new Error(`Required element not found: ${selector}`);
   }
   return element;
+}
+
+type StatusTarget = "stickys" | "images" | "init";
+
+let statusToast: HTMLDivElement | null = null;
+let statusMessageEl: HTMLSpanElement | null = null;
+let statusRetryButton: HTMLButtonElement | null = null;
+let statusTarget: StatusTarget | null = null;
+
+/**
+ * Builds the retry action for a given status target.
+ * @param {StatusTarget} target Which persistence/init step to retry.
+ * @returns {() => Promise<unknown>} Async retry action.
+ */
+function retryActionFor(target: StatusTarget): () => Promise<unknown> {
+  switch (target) {
+    case "stickys":
+      return () => persistStickys();
+    case "images":
+      return () => persistImageStore();
+    case "init":
+      return () => initializeState();
+  }
+}
+
+/**
+ * Lazily creates the non-blocking status toast and caches its sub-elements.
+ * @returns {HTMLDivElement} Status toast element.
+ */
+function ensureStatusToast(): HTMLDivElement {
+  if (statusToast) return statusToast;
+
+  const toast = document.createElement("div");
+  toast.className = "status-toast";
+  toast.setAttribute("role", "alert");
+  toast.setAttribute("aria-live", "assertive");
+  toast.hidden = true;
+
+  const message = document.createElement("span");
+  message.className = "status-toast-message";
+  toast.appendChild(message);
+  statusMessageEl = message;
+
+  const retryButton = document.createElement("button");
+  retryButton.type = "button";
+  retryButton.className = "status-toast-retry";
+  retryButton.textContent = t.retry;
+  retryButton.addEventListener("click", () => {
+    if (!statusTarget) return;
+    retryButton.disabled = true;
+    retryButton.textContent = t.retrying;
+    void retryActionFor(statusTarget)()
+      .then(() => hideStatusToast())
+      .catch(() => {
+        retryButton.disabled = false;
+        retryButton.textContent = t.retry;
+      });
+  });
+  toast.appendChild(retryButton);
+  statusRetryButton = retryButton;
+
+  const dismissButton = document.createElement("button");
+  dismissButton.type = "button";
+  dismissButton.className = "status-toast-dismiss";
+  dismissButton.setAttribute("aria-label", t.dismiss);
+  dismissButton.textContent = "×";
+  dismissButton.addEventListener("click", hideStatusToast);
+  toast.appendChild(dismissButton);
+
+  document.body.appendChild(toast);
+  statusToast = toast;
+  return toast;
+}
+
+/**
+ * Shows the non-blocking status toast for a failed target.
+ * @param {StatusTarget} target Which persistence/init step failed.
+ * @param {string} message User-facing error message.
+ * @returns {void}
+ */
+function showStatusError(target: StatusTarget, message: string): void {
+  const toast = ensureStatusToast();
+  statusTarget = target;
+  if (statusMessageEl) statusMessageEl.textContent = message;
+  if (statusRetryButton) {
+    statusRetryButton.disabled = false;
+    statusRetryButton.textContent = t.retry;
+  }
+  toast.hidden = false;
+}
+
+/**
+ * Hides the status toast and clears its retry state.
+ * @returns {void}
+ */
+function hideStatusToast(): void {
+  if (statusToast) statusToast.hidden = true;
+  statusTarget = null;
+}
+
+/**
+ * Hides the toast when a previously failed target has just persisted
+ * successfully, so the warning never outlives the data it describes.
+ * @param {StatusTarget} target Target that succeeded.
+ * @returns {void}
+ */
+function clearStatusOnSuccess(target: StatusTarget): void {
+  if (statusTarget === target) hideStatusToast();
+}
+
+/**
+ * Reports a persistence failure to the console and the status toast.
+ * @param {StatusTarget} target Which persistence step failed.
+ * @param {unknown} error Underlying error.
+ * @returns {void}
+ */
+function reportPersistFailure(target: StatusTarget, error: unknown): void {
+  console.error(`[storage] failed to persist ${target}`, error);
+  showStatusError(target, t.saveFailed);
 }
 
 const defaultText = t.defaultText;
@@ -229,6 +358,7 @@ async function writePersistedValue(key: string, value: unknown): Promise<void> {
  */
 async function persistStickys(): Promise<void> {
   await writePersistedValue(DB_KEY_STICKYS, stickys);
+  clearStatusOnSuccess("stickys");
 }
 
 /**
@@ -237,6 +367,7 @@ async function persistStickys(): Promise<void> {
  */
 async function persistImageStore(): Promise<void> {
   await writePersistedValue(DB_KEY_IMAGES, imageStore);
+  clearStatusOnSuccess("images");
 }
 
 let persistStickysTimer: number | null = null;
@@ -254,7 +385,7 @@ function schedulePersistStickys(): void {
   persistStickysTimer = window.setTimeout(() => {
     persistStickysTimer = null;
     void persistStickys().catch((error) => {
-      console.error("[storage] failed to persist stickys", error);
+      reportPersistFailure("stickys", error);
     });
   }, PERSIST_DEBOUNCE_MS);
 }
@@ -278,7 +409,7 @@ function flushPersistStickys(): void {
   if (persistStickysTimer === null) return;
   cancelScheduledPersistStickys();
   void persistStickys().catch((error) => {
-    console.error("[storage] failed to persist stickys", error);
+    reportPersistFailure("stickys", error);
   });
 }
 
@@ -484,7 +615,7 @@ const MAX_PASTED_IMAGE_SIZE = 20 * 1024 * 1024;
  */
 function saveImageStore(): void {
   void persistImageStore().catch((error) => {
-    console.error("[storage] failed to persist images", error);
+    reportPersistFailure("images", error);
   });
 }
 
@@ -1413,17 +1544,15 @@ function moveCardToViewportCenter(card: HTMLElement): void {
  * @returns {Promise<void>}
  */
 async function initializeState(): Promise<void> {
-  try {
-    await requestPersistentStorage();
-    await loadStateFromIndexedDb();
-    cleanupUnusedImages();
-    Object.entries(stickys).forEach(([id, data]) => {
-      const card = createCard(id, data, false);
-      grid.appendChild(card);
-    });
-  } catch (error) {
-    console.error("[storage] initialization failed", error);
-  }
+  await requestPersistentStorage();
+  await loadStateFromIndexedDb();
+  cleanupUnusedImages();
+  grid.replaceChildren();
+  cardElementMap.clear();
+  Object.entries(stickys).forEach(([id, data]) => {
+    const card = createCard(id, data, false);
+    grid.appendChild(card);
+  });
 }
 
 /**
@@ -1460,7 +1589,12 @@ function bindGlobalEvents(): void {
  */
 async function bootstrap(): Promise<void> {
   bindGlobalEvents();
-  await initializeState();
+  try {
+    await initializeState();
+  } catch (error) {
+    console.error("[storage] initialization failed", error);
+    showStatusError("init", t.initFailed);
+  }
 }
 
 const settingsContainer = getRequiredElement<HTMLDivElement>("#settings");

@@ -94,6 +94,8 @@ Markdown 中的图片引用格式：
 - `flushPersistStickys()` 在存在待写入防抖任务时立即写入；它会在 `visibilitychange`（hidden）和 `beforeunload` 时运行
 - ZIP 导入会取消待执行的防抖任务，并在刷新前 `await` `persistStickys()` / `persistImageStore()`
 - 图片存储的写入保持立即执行，因为它只在粘贴/清理/导入时变化
+- 写入失败（`stickys` 或图片存储）不再静默，而是通过非阻塞的 `aria-live` 状态提示（`showStatusError`）告知用户，并提供「重试」按钮；重试动作与失败目标一致（`stickys`/`images`）
+- 当失败的持久化目标随后成功写入时，状态提示会自动隐藏（`clearStatusOnSuccess`），避免提示比它所描述的数据存活更久
 
 ### 4.2 localStorage
 
@@ -126,6 +128,7 @@ sequenceDiagram
 - `bootstrap()` 在模块末尾运行，此时设置 UI 和辅助函数已就绪
 - `bindGlobalEvents()` 注册 visibility、Escape 和 unload 监听
 - `initializeState()` 加载存储、清理图片并渲染卡片
+- `initializeState()` 失败时不再静默，而是显示「加载失败」状态提示并支持重试；重试前会清空 `#root` 与 `cardElementMap`，保证重复执行幂等
 - `getRequiredElement()` 在 `#root` 或 `#settings` 缺失时抛出带说明的错误
 
 ## 6. 渲染管线
@@ -410,6 +413,7 @@ Settings 与 Layout 图标是 `<button>`（带 `aria-label`），可键盘聚焦
 | `--z-settings` | 6000 | 设置面板 |
 | `--z-card-maximized` | 6100 | 最大化卡片 |
 | `--z-image-preview` | 9999 | 图片预览遮罩层 |
+| `--z-status-toast` | 10000 | 存储/初始化失败的状态提示 |
 
 - 动态卡片堆叠仍使用模型中的 `zIndex`；`applyCardGeometry()` 会把它内联设置到卡片上
 
