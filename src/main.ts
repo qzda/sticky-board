@@ -907,6 +907,33 @@ function isCardTransformLocked(card: HTMLElement): boolean {
 }
 
 /**
+ * Animates a card from a previously measured rect to its current layout (FLIP).
+ * @param {HTMLElement} card Card element.
+ * @param {DOMRect} previous Rect measured before the layout change.
+ * @returns {void}
+ */
+function animateFlipFrom(card: HTMLElement, previous: DOMRect): void {
+  const current = card.getBoundingClientRect();
+  const dx = previous.left - current.left;
+  const dy = previous.top - current.top;
+
+  // 强制回流，让后续位移过渡有明确的起点
+  void card.offsetWidth;
+
+  if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
+    card.style.transition = "";
+    return;
+  }
+
+  card.style.translate = `${dx}px ${dy}px`;
+
+  requestAnimationFrame(() => {
+    card.style.transition = "";
+    card.style.translate = "0px 0px";
+  });
+}
+
+/**
  * Toggles the maximized state of one card and syncs its action button.
  * @param {HTMLElement} card Card element.
  * @param {boolean} maximized Whether the card should fill the viewport.
@@ -962,15 +989,7 @@ function animateDockedMaximize(
   // 先只保留尺寸过渡，让位置补偿立即生效
   card.style.transition = sizeTransition;
   card.classList.toggle("card-maximized", maximized);
-
-  const after = card.getBoundingClientRect();
-  card.style.translate = `${before.left - after.left}px ${before.top - after.top}px`;
-  void card.offsetWidth;
-
-  requestAnimationFrame(() => {
-    card.style.transition = "";
-    card.style.translate = "0px 0px";
-  });
+  animateFlipFrom(card, before);
 }
 
 /**
@@ -992,33 +1011,39 @@ function syncEditToggleButton(card: HTMLElement): void {
 }
 
 /**
+ * Applies edit or preview mode to one card.
+ * @param {HTMLElement} card Card element.
+ * @param {boolean} isEditing Whether to switch into edit mode.
+ * @returns {void}
+ */
+function setCardEditing(card: HTMLElement, isEditing: boolean): void {
+  const textarea = card.querySelector<HTMLTextAreaElement>("textarea");
+  const preview = card.querySelector<HTMLDivElement>(".preview");
+  if (!textarea || !preview) return;
+
+  textarea.style.display = isEditing ? "block" : "none";
+  preview.style.display = isEditing ? "none" : "block";
+  if (!isEditing) {
+    preview.innerHTML = textToHtml(textarea.value);
+  }
+
+  syncEditToggleButton(card);
+
+  if (isEditing) {
+    window.setTimeout(() => {
+      textarea.focus();
+    }, 200);
+  }
+}
+
+/**
  * Switches one card between edit and preview mode.
  * @param {HTMLElement} card Card element.
  * @param {boolean} isEditing Whether to switch into edit mode.
  * @returns {void}
  */
 function toggleEditMode(card: HTMLElement, isEditing: boolean): void {
-  setTimeout(() => {
-    const textarea = card.querySelector("textarea") as HTMLTextAreaElement;
-    const preview = card.querySelector(".preview") as HTMLDivElement;
-
-    if (isEditing) {
-      // 切换到编辑模式
-      textarea.style.display = "block";
-      preview.style.display = "none";
-
-      setTimeout(() => {
-        textarea.focus();
-      }, 200);
-    } else {
-      // 切换到预览模式
-      textarea.style.display = "none";
-      preview.style.display = "block";
-      preview.innerHTML = textToHtml(textarea.value);
-    }
-
-    syncEditToggleButton(card);
-  });
+  window.setTimeout(() => setCardEditing(card, isEditing));
 }
 
 /**
@@ -1029,14 +1054,34 @@ function toggleAllToPreview(): void {
   const cards = document.querySelectorAll<HTMLDivElement>(".card");
   cards.forEach((card) => {
     if (!isCardEditing(card)) return;
-
-    const textarea = card.querySelector("textarea") as HTMLTextAreaElement;
-    const preview = card.querySelector(".preview") as HTMLDivElement;
-    textarea.style.display = "none";
-    preview.style.display = "block";
-    preview.innerHTML = textToHtml(textarea.value);
-    syncEditToggleButton(card);
+    setCardEditing(card, false);
   });
+}
+
+type CardActionOptions = {
+  className: string;
+  label: string;
+  icon: string;
+  onClick: () => void;
+};
+
+/**
+ * Creates a top-bar action button for a card.
+ * @param {CardActionOptions} options Button options.
+ * @returns {HTMLButtonElement} Action button.
+ */
+function createCardAction(options: CardActionOptions): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `card-action-btn ${options.className}`;
+  button.title = options.label;
+  button.setAttribute("aria-label", options.label);
+  button.innerHTML = options.icon;
+  button.addEventListener("click", (e) => {
+    e.stopPropagation();
+    options.onClick();
+  });
+  return button;
 }
 
 /**
@@ -1074,44 +1119,33 @@ function createCard(
   const actions = document.createElement("div");
   actions.className = "card-actions";
 
-  const editBtn = document.createElement("button");
-  editBtn.type = "button";
-  editBtn.className = "card-action-btn card-edit-btn";
-  editBtn.title = t.editLabel;
-  editBtn.setAttribute("aria-label", t.editLabel);
-  editBtn.innerHTML = editIcon;
-  editBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const isEditing = isCardEditing(card);
-    toggleEditMode(card, !isEditing);
+  const editBtn = createCardAction({
+    className: "card-edit-btn",
+    label: t.editLabel,
+    icon: editIcon,
+    onClick: () => toggleEditMode(card, !isCardEditing(card)),
   });
 
-  const maximizeBtn = document.createElement("button");
-  maximizeBtn.type = "button";
-  maximizeBtn.className = "card-action-btn card-maximize-btn";
-  maximizeBtn.title = t.maximizeLabel;
-  maximizeBtn.setAttribute("aria-label", t.maximizeLabel);
-  maximizeBtn.innerHTML = maximizeIcon;
-  maximizeBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    setCardMaximized(card, !card.classList.contains("card-maximized"));
+  const maximizeBtn = createCardAction({
+    className: "card-maximize-btn",
+    label: t.maximizeLabel,
+    icon: maximizeIcon,
+    onClick: () =>
+      setCardMaximized(card, !card.classList.contains("card-maximized")),
   });
 
-  const deleteBtn = document.createElement("button");
-  deleteBtn.type = "button";
-  deleteBtn.className = "card-action-btn card-close-btn";
-  deleteBtn.title = t.deleteLabel;
-  deleteBtn.setAttribute("aria-label", t.deleteLabel);
-  deleteBtn.innerHTML = closeIcon;
-  deleteBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (confirm(t.deleteConfirm)) {
+  const deleteBtn = createCardAction({
+    className: "card-close-btn",
+    label: t.deleteLabel,
+    icon: closeIcon,
+    onClick: () => {
+      if (!confirm(t.deleteConfirm)) return;
       deleteCard(id);
       card.remove();
       if (isTimelineLayout()) {
         renderTimelineLayout();
       }
-    }
+    },
   });
 
   actions.appendChild(editBtn);
@@ -1371,6 +1405,25 @@ document.body.addEventListener("click", (e) => {
     cleanupUnusedImages();
   }
 });
+
+/**
+ * Normalizes imported layout numbers, falling back to defaults for missing values.
+ * @param {StickyConfigEntry} cfg Imported config entry.
+ * @param {Omit<Sticky, "text">} defaults Fallback layout.
+ * @returns {Omit<Sticky, "text">} Normalized layout.
+ */
+function normalizeImportedLayout(
+  cfg: StickyConfigEntry,
+  defaults: Omit<Sticky, "text">,
+): Omit<Sticky, "text"> {
+  return {
+    x: Number(cfg.x) || defaults.x,
+    y: Number(cfg.y) || defaults.y,
+    width: Number(cfg.width) || defaults.width,
+    height: Number(cfg.height) || defaults.height,
+    zIndex: Number(cfg.zIndex) || defaults.zIndex,
+  };
+}
 
 /**
  * Returns current maximum z-index across all stickys.
@@ -1767,25 +1820,7 @@ function animateCardLayoutChange(
   cards.forEach((card) => {
     const previous = previousRects.get(card);
     if (!previous) return;
-
-    const current = card.getBoundingClientRect();
-    const dx = previous.left - current.left;
-    const dy = previous.top - current.top;
-
-    // 强制回流，让后续位移过渡有明确的起点
-    void card.offsetWidth;
-
-    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
-      card.style.transition = "";
-      return;
-    }
-
-    card.style.translate = `${dx}px ${dy}px`;
-
-    requestAnimationFrame(() => {
-      card.style.transition = "";
-      card.style.translate = "0px 0px";
-    });
+    animateFlipFrom(card, previous);
   });
 }
 
@@ -1960,13 +1995,7 @@ uploadAction.addEventListener("click", () => {
           const cfg = configById[id];
           const defaultLayout = getDefaultStickyLayout(defaultLayoutIndex, baseZIndex);
           const layout = cfg
-            ? {
-              x: Number(cfg.x) || defaultLayout.x,
-              y: Number(cfg.y) || defaultLayout.y,
-              width: Number(cfg.width) || defaultLayout.width,
-              height: Number(cfg.height) || defaultLayout.height,
-              zIndex: Number(cfg.zIndex) || defaultLayout.zIndex,
-            }
+            ? normalizeImportedLayout(cfg, defaultLayout)
             : defaultLayout;
           if (!cfg) {
             defaultLayoutIndex += 1;

@@ -226,8 +226,8 @@ Maximize behavior:
 - Docked (timeline) cards need an extra step: they are flow-positioned with
   `transform: none !important`, so the absolute/fixed switch is not animatable and the
   card would jump to the viewport corner. `animateDockedMaximize()` temporarily limits
-  the inline transition to size properties, applies a `translate` FLIP offset from the
-  old rect, then animates it to `0 0` while size keeps transitioning. Free-layout cards
+  the inline transition to size properties, then delegates the position compensation to
+  `animateFlipFrom()`, the same FLIP helper used by timeline toggling. Free-layout cards
   keep the simpler path because their `transform` interpolation already provides the
   motion
 - Only one card can be maximized at a time; maximizing another card restores the previous one
@@ -264,10 +264,13 @@ Using `interactjs`:
 
 - Right-click card enters edit mode (except delete button/resize handle)
 - `.card-edit-btn` in the top bar toggles edit/preview without needing a context menu
+- `setCardEditing(card, editing)` is the single implementation for both the top-bar
+  toggle and the click-on-empty-area preview action
 - Left click card brings it to top z-index
 
 ### 7.4 Card Action Buttons
 
+- All three buttons are built by `createCardAction()` from an icon, label and handler
 - Buttons call `stopPropagation()`, so they never bring the card to front or start a drag
 - Maximize/restore keeps the saved geometry; delete re-renders the timeline when docked
 
@@ -291,7 +294,7 @@ Special interaction in timeline mode:
   - bring that card to top
   - move it to viewport center (snapped to 16px grid)
 
-Toggle animation (`setLayoutMode` + `animateCardLayoutChange`):
+Toggle animation (`setLayoutMode` + `animateFlipFrom`):
 
 - Capture each card's viewport rect before the layout change
 - Disable `transition` on cards, apply the docked/free layout, then measure new rects
@@ -300,6 +303,8 @@ Toggle animation (`setLayoutMode` + `animateCardLayoutChange`):
   `transform: none !important`)
 - On the next frame restore transitions and animate `translate` to `0 0`, so cards glide
   from their old position to the new one in both directions
+- `animateFlipFrom()` is shared with docked maximize, so both transitions follow one
+  implementation
 
 ## 9. Image Lifecycle
 
