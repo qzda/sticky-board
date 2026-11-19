@@ -19,8 +19,9 @@
 | P2-2 导入数据校验 | 已完成 | `a425051` |
 | P2-5 测试与工具链 | 已完成 | `8934ffb` |
 | P2-4 可访问性与小缺陷 | 已完成 | `9dde289` |
+| P2-3 错误提示 | 已完成 | `990478e` |
 
-P0-2 的图片 Referrer Policy 已落实，原样 HTML 信任边界见下文。待处理项为 P2-3（错误提示）。
+P0-2 的图片 Referrer Policy 已落实，原样 HTML 信任边界见下文。
 
 ## 1. 现状分层快照
 
@@ -103,6 +104,15 @@ P0-2 的图片 Referrer Policy 已落实，原样 HTML 信任边界见下文。�
 ### P2-3 错误只进控制台
 
 存储失败（`src/main.ts:335`、`src/main.ts:349`、`src/main.ts:361`）和初始化失败（`src/main.ts:1364`）用户完全无感。加到一定规模后，静默丢数据是最大风险。建议加一个非阻塞、`aria-live` 的状态提示，并支持重试。
+
+处理结果：
+
+- 新增非阻塞状态提示（`role="alert"` + `aria-live="assertive"`，`position: fixed`，不拦截交互），带「重试」与「关闭」按钮。
+- 便签写入（`schedulePersistStickys`/`flushPersistStickys`）与图片写入（`saveImageStore`）失败时统一走 `reportPersistFailure()`，提示「保存失败，更改可能丢失」。
+- 初始化失败由 `bootstrap()` 捕获并提示「加载失败，便签可能无法显示」，重试动作重新执行 `initializeState()`。
+- 重试目标按失败来源区分（`stickys`/`images`/`init`）；失败目标随后成功写入时自动隐藏提示（`clearStatusOnSuccess`）。
+- `initializeState()` 改为在渲染前 `grid.replaceChildren()` + `cardElementMap.clear()`，保证重试幂等。
+- 文案加入 i18n（中/英），新增 `--z-status-toast` 层级变量并写入 `ARCHITECTURE.md`。
 
 ### P2-4 可访问性与小缺陷
 

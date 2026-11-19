@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 bun.lock
 tsconfig.tsbuildinfo
+
+# Playwright MCP verification artifacts
+.playwright-mcp/
