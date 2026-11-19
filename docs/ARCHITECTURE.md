@@ -147,7 +147,7 @@ sequenceDiagram
 - Image 规则：
   - 如果 src 以 `sticky-image://` 开头，则查询 `imageStore[key]`
   - 把 Blob 转换为 Object URL（带缓存）
-  - 如果图片缺失，把 alt 回退为 `[missing image]`
+  - 如果图片缺失，把 alt 回退为本地化的 `missingImage` 文案
 - Fence / code_block 规则：把代码块包装为带复制按钮的 `.code-block`
   （见 6.4）
 
@@ -206,6 +206,7 @@ sequenceDiagram
 - 同一时间只能最大化一张卡片；最大化另一张会还原前一张
 - 最大化期间，拖拽和缩放监听通过 `isCardTransformLocked()`（`isTimelineLayout() || .card-maximized`）直接退出，因此几何信息保持不变
 - 时间轴模式保留相同的卡片外观：`.layout-docked` 除 `max-height: 20rem` 外沿用普通卡片样式，因此最大化/删除按钮仍然可见可用。它还会隐藏不可见的 `.resize` 手柄，使 interact.js 不再注册缩放手柄边缘，也不再设置 `nwse-resize` 光标
+- 退出时间轴布局时，`restoreFromLayoutMode()` 会把仍处于 `card-maximized` 的停靠卡片还原为普通尺寸，避免它们以固定定位继续覆盖视口
 
 ## 7. 交互模型
 
@@ -216,6 +217,7 @@ sequenceDiagram
 - 当尺寸 >= `MIN_CARD_SIZE_PX x MIN_CARD_SIZE_PX` 时，`mouseup` 创建卡片
 - 尺寸通过 `/ REM_IN_PX` 转换为 rem
 - 创建拖拽期间全局禁用 `user-select`，避免文本选择产生的视觉残留
+- 切换到时间轴布局时 `setLayoutMode()` 会调用 `finishCreateDragging()`，清理残留的绘制阴影与 `user-select` 锁定
 
 ### 7.2 移动/缩放卡片
 
@@ -225,6 +227,7 @@ sequenceDiagram
 - 将边缘限制在父容器内
 - 拖拽吸附：`GRID_SIZE` 网格
 - 拖拽限制：在 `#root` 内
+- 拖拽 `ignoreFrom`：`textarea, .preview, .card-actions`，编辑区与操作按钮不会启动拖拽
 - 拖拽/缩放开始时：`bringCardToFront()`
 - 移动/结束时：`commitCardGeometry()` 先更新模型，再把 `x/y/width/height` 投影到卡片
 
@@ -233,6 +236,7 @@ sequenceDiagram
 - 右键卡片进入编辑模式（删除按钮/缩放手柄除外）
 - 顶栏 `.card-edit-btn` 无需右键菜单即可切换编辑/预览
 - `setCardEditing(card, editing)` 是顶栏切换和点击空白区域预览动作的唯一实现
+- 进入编辑模式后在下一帧（`requestAnimationFrame`）聚焦 textarea，避免固定 200ms 延迟抢走用户已转移的焦点
 - 左键点击卡片会把它提升到最高 z-index
 
 ### 7.4 卡片操作按钮
@@ -260,6 +264,7 @@ sequenceDiagram
   - 退出时间轴模式
   - 把该卡片置顶
   - 移动到视口中心（吸附到 `GRID_SIZE`）
+  - 若停靠卡片处于最大化状态会一并还原（见 6.5）
 
 切换动画（`setLayoutMode` + `animateFlipFrom`）：
 
@@ -375,9 +380,11 @@ ID 解析规则：
 - Sunny 开关
 - Export 按钮
 - Import 按钮
-- Layout 切换图标
-- Settings 图标
+- Layout 切换按钮
+- Settings 按钮
 - GitHub 链接
+
+Settings 与 Layout 图标是 `<button>`（带 `aria-label`），可键盘聚焦与操作，不再使用不可聚焦的裸 SVG。
 
 展开/收起行为：
 

@@ -18,7 +18,6 @@ import leavesVideo from "./assets/leaves.mp4";
 import {
   COPY_FEEDBACK_MS,
   CREATE_DRAG_THRESHOLD_PX,
-  EDIT_FOCUS_DELAY_MS,
   GRID_SIZE,
   MIN_CARD_SIZE_PX,
   PERSIST_DEBOUNCE_MS,
@@ -76,6 +75,8 @@ const texts = {
     restoreLabel: "还原",
     editLabel: "编辑",
     previewLabel: "预览",
+    missingImage: "图片缺失",
+    settingsLabel: "设置",
     defaultText:
       "## Hi naonao\n- 右键卡片进入编辑模式，按 Esc 退出编辑\n- 点击顶栏按钮可切换编辑/预览\n- 点击页面空白处预览\n- 按住顶部移动位置\n- 按住右下角调整大小\n- 点击右上角按钮可最大化/还原便签\n- 代码块右上角支持一键复制\n- 支持粘贴图片（单张不超过 20MB）",
   },
@@ -99,6 +100,8 @@ const texts = {
     restoreLabel: "Restore",
     editLabel: "Edit",
     previewLabel: "Preview",
+    missingImage: "Missing image",
+    settingsLabel: "Settings",
     defaultText:
       "## Hi naonao\n- Right-click a card to edit, press Esc to exit editing\n- Use the top-bar button to switch between edit and preview\n- Click any empty area to preview\n- Drag the top area to move the card\n- Drag the bottom-right corner to resize\n- Use the top-right button to maximize/restore the note\n- Code blocks have a one-click copy button\n- Paste image is supported (up to 20MB each)",
   },
@@ -719,7 +722,7 @@ md.renderer.rules.image = (tokens, idx, options, _env, self) => {
     if (imageData) {
       token.attrSet("src", getImageObjectUrl(key, imageData));
     } else {
-      token.attrSet("alt", "[missing image]");
+      token.attrSet("alt", t.missingImage);
     }
   }
 
@@ -972,9 +975,9 @@ function setCardEditing(card: HTMLElement, isEditing: boolean): void {
   syncEditToggleButton(card);
 
   if (isEditing) {
-    window.setTimeout(() => {
+    requestAnimationFrame(() => {
       textarea.focus();
-    }, EDIT_FOCUS_DELAY_MS);
+    });
   }
 }
 
@@ -1491,14 +1494,37 @@ function createSvgElement(
 
   return svg as SVGElement;
 }
-const layoutIcon = createSvgElement(layout, {
-  alt: "layout",
-});
-layoutIcon.classList.add("settings-layout-btn");
-layoutIcon.setAttribute("title", t.layoutMode);
-const settingsIcon = createSvgElement(settings, {
-  alt: "settings",
-});
+
+/**
+ * Creates a fixed settings-panel icon button.
+ * @param {string} svgRaw Raw icon SVG.
+ * @param {string} label Accessible label and tooltip for the button.
+ * @param {string} className Additional class name.
+ * @returns {HTMLButtonElement} Settings icon button.
+ */
+function createSettingsIconButton(
+  svgRaw: string,
+  label: string,
+  className: string,
+): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `settings-icon-btn ${className}`;
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  button.appendChild(createSvgElement(svgRaw, { alt: label }));
+  return button;
+}
+const layoutIcon = createSettingsIconButton(
+  layout,
+  t.layoutMode,
+  "settings-layout-btn",
+);
+const settingsIcon = createSettingsIconButton(
+  settings,
+  t.settingsLabel,
+  "settings-settings-btn",
+);
 
 /**
  * Creates an action button used in settings panel.
@@ -1654,6 +1680,10 @@ function restoreFromLayoutMode(): void {
     if (card.parentElement !== grid) {
       grid.appendChild(card);
     }
+    // 退出时间轴时还原可能遗留的全屏态，避免卡片停在固定定位覆盖视口
+    if (card.classList.contains("card-maximized")) {
+      setCardMaximized(card, false);
+    }
   });
   dockedLayoutCardIds.clear();
   if (layoutPanel) layoutPanel.innerHTML = "";
@@ -1721,6 +1751,7 @@ function animateCardLayoutChange(
  */
 function setLayoutMode(enabled: boolean): void {
   if (enabled === isTimelineLayout()) return;
+  finishCreateDragging();
   ensureLayoutPanel();
 
   // 先记录卡片位置并关闭过渡，布局切换后再用 FLIP 补间
@@ -1974,7 +2005,7 @@ interact(".card")
       }),
     ],
     inertia: true,
-    ignoreFrom: "textarea, .preview",
+    ignoreFrom: "textarea, .preview, .card-actions",
 
     listeners: {
       start(event) {

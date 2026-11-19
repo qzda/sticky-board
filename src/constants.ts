@@ -31,9 +31,6 @@ export const PERSIST_DEBOUNCE_MS = 300;
 /** How long the copy button keeps its success state, in milliseconds. */
 export const COPY_FEEDBACK_MS = 1500;
 
-/** Delay before focusing a textarea after entering edit mode, in milliseconds. */
-export const EDIT_FOCUS_DELAY_MS = 200;
-
 /** Stagger between settings items during pop-in/pop-out. */
 export const SETTINGS_ITEM_ANIMATION_STEP_MS = 45;
 
