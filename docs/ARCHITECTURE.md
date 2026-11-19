@@ -124,7 +124,12 @@ sequenceDiagram
   end
 ```
 
-Key function: `initializeState()`.
+Key functions:
+
+- `bootstrap()` runs at the end of the module, after settings UI and helpers are set up
+- `bindGlobalEvents()` registers visibility, Escape and unload listeners
+- `initializeState()` loads storage, cleans images and renders cards
+- `getRequiredElement()` throws a descriptive error when `#root` or `#settings` is missing
 
 ## 6. Rendering Pipeline
 

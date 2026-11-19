@@ -97,6 +97,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Returns a required DOM element, throwing a descriptive error when missing.
+ * @template T
+ * @param {string} selector CSS selector.
+ * @returns {T} Matching element.
+ */
+function getRequiredElement<T extends Element>(selector: string): T {
+  const element = document.querySelector<T>(selector);
+  if (!element) {
+    throw new Error(`Required element not found: ${selector}`);
+  }
+  return element;
+}
+
 const defaultText = t.defaultText;
 const IMAGE_SRC_PREFIX = "sticky-image://";
 const IMAGE_KEY_PATTERN = /!\[[^\]]*]\(sticky-image:\/\/([a-zA-Z0-9_-]+)\)/g;
@@ -688,23 +702,6 @@ function ensureSunnyVideoOverlay(): void {
   syncSunnyVideoPlayback();
 }
 
-document.addEventListener("visibilitychange", () => {
-  syncSunnyVideoPlayback();
-  if (document.visibilityState === "hidden") {
-    flushPersistStickys();
-  }
-});
-
-// Esc 退出编辑模式（最大化铺满视口时无法点击空白处预览）
-document.addEventListener("keydown", (e) => {
-  if (e.key !== "Escape") return;
-
-  document.querySelectorAll<HTMLDivElement>(".card").forEach((card) => {
-    if (!isCardEditing(card)) return;
-    toggleEditMode(card, false);
-  });
-});
-
 /**
  * Lazily creates image preview overlay.
  * @returns {void}
@@ -1231,7 +1228,7 @@ function createCard(
   return card;
 }
 
-const grid = document.querySelector<HTMLDivElement>("#root")!;
+const grid = getRequiredElement<HTMLDivElement>("#root");
 
 let isDraggingToCreate = false;
 let startX = 0;
@@ -1447,14 +1444,44 @@ async function initializeState(): Promise<void> {
   }
 }
 
-void initializeState();
+/**
+ * Binds document-level listeners that do not depend on card creation.
+ * @returns {void}
+ */
+function bindGlobalEvents(): void {
+  document.addEventListener("visibilitychange", () => {
+    syncSunnyVideoPlayback();
+    if (document.visibilityState === "hidden") {
+      flushPersistStickys();
+    }
+  });
 
-window.addEventListener("beforeunload", () => {
-  flushPersistStickys();
-  revokeAllImageUrls();
-});
+  // Esc 退出编辑模式（最大化铺满视口时无法点击空白处预览）
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
 
-const settingsContainer = document.querySelector<HTMLDivElement>("#settings")!;
+    document.querySelectorAll<HTMLDivElement>(".card").forEach((card) => {
+      if (!isCardEditing(card)) return;
+      toggleEditMode(card, false);
+    });
+  });
+
+  window.addEventListener("beforeunload", () => {
+    flushPersistStickys();
+    revokeAllImageUrls();
+  });
+}
+
+/**
+ * Starts the app after module state, DOM helpers and settings UI are ready.
+ * @returns {Promise<void>}
+ */
+async function bootstrap(): Promise<void> {
+  bindGlobalEvents();
+  await initializeState();
+}
+
+const settingsContainer = getRequiredElement<HTMLDivElement>("#settings");
 
 /**
  * Converts raw SVG markup into an SVGElement and applies optional attributes.
@@ -2069,3 +2096,5 @@ interact(".card")
       },
     },
   });
+
+void bootstrap();
