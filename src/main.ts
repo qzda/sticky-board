@@ -588,6 +588,14 @@ function isCardEditing(card: HTMLElement): boolean {
 }
 
 /**
+ * Returns whether any card is currently in edit mode.
+ * @returns {boolean} True when at least one card's textarea is visible.
+ */
+function hasEditingCard(): boolean {
+  return Array.from(cardElementMap.values()).some((card) => isCardEditing(card));
+}
+
+/**
  * Returns whether the timeline layout mode is active.
  * @returns {boolean} True when the timeline layout class is on the body.
  */
@@ -1577,8 +1585,16 @@ function bindGlobalEvents(): void {
     });
   });
 
-  window.addEventListener("beforeunload", () => {
+  window.addEventListener("beforeunload", (event) => {
     flushPersistStickys();
+
+    // 有便签处于编辑模式时，阻止页面直接关闭，弹出浏览器原生确认。
+    if (hasEditingCard()) {
+      event.preventDefault();
+      event.returnValue = "";
+      return;
+    }
+
     revokeAllImageUrls();
   });
 }

@@ -126,7 +126,8 @@ sequenceDiagram
 关键函数：
 
 - `bootstrap()` 在模块末尾运行，此时设置 UI 和辅助函数已就绪
-- `bindGlobalEvents()` 注册 visibility、Escape 和 unload 监听
+- `bindGlobalEvents()` 注册 visibility、Escape 和 beforeunload 监听
+- 关闭页面或标签页时，若有便签处于编辑模式，`beforeunload` 会调用 `preventDefault()` 弹出浏览器原生确认，避免误关丢失正在编辑的内容；无编辑便签时才执行 `flushPersistStickys()` + `revokeAllImageUrls()` 清理
 - `initializeState()` 加载存储、清理图片并渲染卡片
 - `initializeState()` 失败时不再静默，而是显示「加载失败」状态提示并支持重试；重试前会清空 `#root` 与 `cardElementMap`，保证重复执行幂等
 - `getRequiredElement()` 在 `#root` 或 `#settings` 缺失时抛出带说明的错误
@@ -160,6 +161,7 @@ sequenceDiagram
 - 预览模式：`.preview` 可见（由 Markdown 生成的 HTML）
 - `Escape` 会让仍处于编辑状态的卡片退出编辑模式（当最大化卡片铺满整个画布、没有空白区域可点击时需要）
 - 卡片控制区（`.card-actions`，右上角）：编辑/预览切换 + 最大化/还原 + 删除按钮
+- 存在编辑中的便签时，关闭页面会触发浏览器原生「离开站点」确认（`hasEditingCard()` + `beforeunload`）
 
 全局点击行为：
 
