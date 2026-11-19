@@ -1,6 +1,14 @@
 :root {
   --color-card: #171717;
   --bg-card: #ffffaa;
+  --z-card: 1;
+  --z-card-control: 10;
+  --z-code-copy: 1;
+  --z-creating-shadow: 1000;
+  --z-sunny-overlay: 4400;
+  --z-settings: 6000;
+  --z-card-maximized: 6100;
+  --z-image-preview: 9999;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -85,7 +93,7 @@ body {
   box-shadow:
     1rem 1rem 1rem rgba(128, 128, 128, 0.25),
     -0.5rem -0.5rem 0.5rem rgba(128, 128, 128, 0.125);
-  z-index: 1;
+  z-index: var(--z-card);
   transition: all 0.2s ease-in-out;
 
   // &::before {
@@ -104,7 +112,7 @@ body {
   &.layout-docked {
     position: relative !important;
     transform: none !important;
-    z-index: 1 !important;
+    z-index: var(--z-card) !important;
     max-height: 20rem;
     flex: 0 0 auto;
 
@@ -122,7 +130,7 @@ body {
     max-width: 100dvw;
     max-height: 100dvh;
     transform: none !important;
-    z-index: 6100 !important;
+    z-index: var(--z-card-maximized) !important;
 
     .resize {
       display: none;
@@ -243,7 +251,7 @@ body {
       color: inherit;
       opacity: 0.6;
       cursor: pointer;
-      z-index: 1;
+      z-index: var(--z-code-copy);
       transition:
         opacity 0.2s,
         background-color 0.2s,
@@ -314,7 +322,7 @@ body {
     display: flex;
     align-items: center;
     gap: 0.25rem;
-    z-index: 10;
+    z-index: var(--z-card-control);
 
     .card-action-btn {
       position: static;
@@ -372,7 +380,7 @@ body {
     justify-content: center;
     opacity: 0.75;
     transition: opacity 0.2s;
-    z-index: 10;
+    z-index: var(--z-card-control);
 
     &:hover {
       opacity: 1;
@@ -391,7 +399,7 @@ body {
   flex-direction: column;
   gap: 1rem;
   user-select: none;
-  z-index: 6000;
+  z-index: var(--z-settings);
 
   >* {
     opacity: 0.6;
@@ -553,7 +561,7 @@ body {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 4400;
+  z-index: var(--z-sunny-overlay);
   overflow: hidden;
   opacity: 0;
   transition: opacity 0.35s ease;
@@ -578,7 +586,7 @@ body {
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.85);
-  z-index: 9999;
+  z-index: var(--z-image-preview);
   padding: 2rem;
 
   &.open {

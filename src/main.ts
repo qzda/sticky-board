@@ -15,6 +15,17 @@ import minimizeIcon from "./assets/LucideMinimize.svg?raw";
 import editIcon from "./assets/LucideSquarePen.svg?raw";
 import previewIcon from "./assets/LucideEye.svg?raw";
 import leavesVideo from "./assets/leaves.mp4";
+import {
+  COPY_FEEDBACK_MS,
+  CREATE_DRAG_THRESHOLD_PX,
+  EDIT_FOCUS_DELAY_MS,
+  GRID_SIZE,
+  MIN_CARD_SIZE_PX,
+  PERSIST_DEBOUNCE_MS,
+  REM_IN_PX,
+  SETTINGS_ITEM_ANIMATION_DURATION_MS,
+  SETTINGS_ITEM_ANIMATION_STEP_MS,
+} from "./constants";
 
 /**
  * Detects UI language from browser locale.
@@ -134,7 +145,6 @@ let stickys: Stickys = {};
 let imageStore: Record<string, Blob> = {};
 const imageUrlCache = new Map<string, string>();
 const cardElementMap = new Map<string, HTMLDivElement>();
-const PERSIST_DEBOUNCE_MS = 300;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -892,7 +902,7 @@ async function handleCopyCodeClick(button: HTMLButtonElement): Promise<void> {
     button.setAttribute("title", t.copyCode);
     button.setAttribute("aria-label", t.copyCode);
     copyResetTimers.delete(button);
-  }, 1500);
+  }, COPY_FEEDBACK_MS);
 
   copyResetTimers.set(button, timer);
 }
@@ -1032,7 +1042,7 @@ function setCardEditing(card: HTMLElement, isEditing: boolean): void {
   if (isEditing) {
     window.setTimeout(() => {
       textarea.focus();
-    }, 200);
+    }, EDIT_FOCUS_DELAY_MS);
   }
 }
 
@@ -1304,14 +1314,17 @@ grid.addEventListener("mousemove", (e) => {
     const deltaY = e.clientY - startY;
 
     // 只有移动距离足够时才显示阴影
-    if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
+    if (
+      Math.abs(deltaX) > CREATE_DRAG_THRESHOLD_PX ||
+      Math.abs(deltaY) > CREATE_DRAG_THRESHOLD_PX
+    ) {
       if (!shadowDiv) {
         shadowDiv = document.createElement("div");
         shadowDiv.style.position = "absolute";
         shadowDiv.style.border = "2px dashed gray";
         shadowDiv.style.backgroundColor = "rgba(128, 128, 128, 0.1)";
         shadowDiv.style.pointerEvents = "none";
-        shadowDiv.style.zIndex = "1000";
+        shadowDiv.style.zIndex = "var(--z-creating-shadow)";
         grid.appendChild(shadowDiv);
       }
 
@@ -1322,10 +1335,10 @@ grid.addEventListener("mousemove", (e) => {
       const height = Math.abs(deltaY);
 
       // 对齐到网格，但不设置最小值
-      const gridLeft = Math.round(left / 16) * 16;
-      const gridTop = Math.round(top / 16) * 16;
-      const gridWidth = Math.round(width / 16) * 16;
-      const gridHeight = Math.round(height / 16) * 16;
+      const gridLeft = Math.round(left / GRID_SIZE) * GRID_SIZE;
+      const gridTop = Math.round(top / GRID_SIZE) * GRID_SIZE;
+      const gridWidth = Math.round(width / GRID_SIZE) * GRID_SIZE;
+      const gridHeight = Math.round(height / GRID_SIZE) * GRID_SIZE;
 
       shadowDiv.style.left = `${gridLeft}px`;
       shadowDiv.style.top = `${gridTop}px`;
@@ -1340,17 +1353,17 @@ grid.addEventListener("mouseup", () => {
   if (isTimelineLayout()) return;
   if (isDraggingToCreate) {
     // 只有在范围足够大时才创建卡片
-    // 要求宽度和高度都至少达到 160px (10rem)
+    // 要求宽度和高度都至少达到 MIN_CARD_SIZE_PX
     if (shadowDiv) {
       const width = parseInt(shadowDiv.style.width);
       const height = parseInt(shadowDiv.style.height);
 
-      if (width >= 160 && height >= 160) {
+      if (width >= MIN_CARD_SIZE_PX && height >= MIN_CARD_SIZE_PX) {
         // 获取阴影的位置和大小
         const left = parseInt(shadowDiv.style.left);
         const top = parseInt(shadowDiv.style.top);
-        const widthRem = (width / 16) >> 0; // 转换为rem
-        const heightRem = (height / 16) >> 0;
+        const widthRem = (width / REM_IN_PX) >> 0; // 转换为rem
+        const heightRem = (height / REM_IN_PX) >> 0;
 
         // 创建实际的卡片
         const card = createCard(
@@ -1465,7 +1478,7 @@ function bringCardToFront(card: HTMLElement): void {
 }
 
 /**
- * Moves a card to the center of current viewport and snaps to 16px grid.
+ * Moves a card to the center of current viewport and snaps to the layout grid.
  * @param {HTMLElement} card Card element to move.
  * @returns {void}
  */
@@ -1473,8 +1486,8 @@ function moveCardToViewportCenter(card: HTMLElement): void {
   const rect = card.getBoundingClientRect();
   const rawX = window.scrollX + (window.innerWidth - rect.width) / 2;
   const rawY = window.scrollY + (window.innerHeight - rect.height) / 2;
-  const x = Math.max(0, Math.round(rawX / 16) * 16);
-  const y = Math.max(0, Math.round(rawY / 16) * 16);
+  const x = Math.max(0, Math.round(rawX / GRID_SIZE) * GRID_SIZE);
+  const y = Math.max(0, Math.round(rawY / GRID_SIZE) * GRID_SIZE);
 
   commitCardGeometry(card, { x, y });
 }
@@ -1643,8 +1656,6 @@ settingsContainer.appendChild(githubLink);
 
 let isExpanded = false;
 const settingsItems: HTMLElement[] = [sunnyToggle, downloadAction, uploadAction];
-const SETTINGS_ITEM_ANIMATION_STEP_MS = 45;
-const SETTINGS_ITEM_ANIMATION_DURATION_MS = 260;
 let settingsAnimationTimer: ReturnType<typeof setTimeout> | null = null;
 let layoutPanel: HTMLDivElement | null = null;
 const dockedLayoutCardIds = new Set<string>();
@@ -2067,8 +2078,8 @@ interact(".card")
         if (isCardTransformLocked(event.target as HTMLElement)) return;
         const target = event.target as HTMLElement;
 
-        const width = (event.rect.width / 16) >> 0,
-          height = (event.rect.height / 16) >> 0;
+        const width = (event.rect.width / REM_IN_PX) >> 0,
+          height = (event.rect.height / REM_IN_PX) >> 0;
 
         commitCardGeometry(target, { width, height });
       },
@@ -2077,7 +2088,7 @@ interact(".card")
   .draggable({
     modifiers: [
       interact.modifiers.snap({
-        targets: [interact.snappers.grid({ x: 16, y: 16 })],
+        targets: [interact.snappers.grid({ x: GRID_SIZE, y: GRID_SIZE })],
         range: Infinity,
         relativePoints: [{ x: 0, y: 0 }],
       }),

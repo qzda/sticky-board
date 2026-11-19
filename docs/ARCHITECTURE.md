@@ -244,8 +244,8 @@ Maximize behavior:
 
 - `mousedown` on `#root` starts draw mode (only if target is root itself)
 - `mousemove` shows dashed shadow box
-- `mouseup` creates card if >= `160px x 160px`
-- Dimensions are converted to rem via `/16`
+- `mouseup` creates card if >= `MIN_CARD_SIZE_PX x MIN_CARD_SIZE_PX`
+- Dimensions are converted to rem via `/ REM_IN_PX`
 - During creation drag, `user-select` is disabled globally to prevent text selection artifacts
 
 ### 7.2 Move/Resize Cards
@@ -254,7 +254,7 @@ Using `interactjs`:
 
 - Resize handle: `.resize`
 - Restrict edges to parent
-- Drag snap: `16px` grid
+- Drag snap: `GRID_SIZE` grid
 - Drag restriction: within `#root`
 - On drag/resize start: `bringCardToFront()`
 - On move/end: `commitCardGeometry()` updates the model first, then projects
@@ -292,7 +292,7 @@ Special interaction in timeline mode:
 - Double-click any card:
   - exit timeline mode
   - bring that card to top
-  - move it to viewport center (snapped to 16px grid)
+  - move it to viewport center (snapped to `GRID_SIZE`)
 
 Toggle animation (`setLayoutMode` + `animateFlipFrom`):
 
@@ -417,6 +417,39 @@ Expand/collapse behavior:
 - Playback is paused/resumed by visibility state
 - Reduced motion media query disables overlay
 - Card/scrollbar/timeline styles are in `src/style.scss`
+- Layer order is centralized in `:root` custom properties:
+
+| Variable | Value | Used by |
+|---|---|---|
+| `--z-card` | 1 | Card base and docked cards |
+| `--z-card-control` | 10 | Card action bar and resize handle |
+| `--z-code-copy` | 1 | Copy button inside a code block |
+| `--z-creating-shadow` | 1000 | Drag-to-create shadow box |
+| `--z-sunny-overlay` | 4400 | Sunny video overlay |
+| `--z-settings` | 6000 | Settings panel |
+| `--z-card-maximized` | 6100 | Maximized card |
+| `--z-image-preview` | 9999 | Image preview overlay |
+
+- Dynamic card stacking is still the model `zIndex`; `applyCardGeometry()` sets it inline
+
+## 13.1 Layout Constants
+
+`src/constants.ts` centralizes the numbers shared by interaction and persistence:
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `REM_IN_PX` | 16 | Pixels per rem assumed by layout math |
+| `GRID_SIZE` | 16 | Drag/creation snap step, matches the 1rem dot grid |
+| `MIN_CARD_SIZE_PX` | 160 | Minimum width/height for a newly created card |
+| `CREATE_DRAG_THRESHOLD_PX` | 5 | Pointer movement before the creation shadow appears |
+| `PERSIST_DEBOUNCE_MS` | 300 | Stickys write debounce |
+| `COPY_FEEDBACK_MS` | 1500 | Copy button success state duration |
+| `EDIT_FOCUS_DELAY_MS` | 200 | Delay before focusing a textarea |
+| `SETTINGS_ITEM_ANIMATION_STEP_MS` | 45 | Settings item stagger |
+| `SETTINGS_ITEM_ANIMATION_DURATION_MS` | 260 | Settings item duration |
+
+- `Sticky.x/y` stay in pixels; `Sticky.width/height` stay in rem
+- Conversions use `REM_IN_PX` and `GRID_SIZE` instead of bare literals
 
 ## 14. Key Invariants
 
