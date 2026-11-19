@@ -86,6 +86,8 @@ type Sticky = {
   text: string;
 };
 
+type CardGeometry = Pick<Sticky, "x" | "y" | "width" | "height" | "zIndex">;
+
 /**
  * Checks whether a value is a plain object record.
  * @param {unknown} value The value to validate.
@@ -390,6 +392,55 @@ function updateSticky(id: string, data: Partial<Sticky>): void {
 }
 
 /**
+ * Projects geometry from the model onto a card element.
+ * @param {HTMLElement} card Card element.
+ * @param {CardGeometry} geometry Geometry to apply.
+ * @returns {void}
+ */
+function applyCardGeometry(card: HTMLElement, geometry: CardGeometry): void {
+  card.style.width = `${geometry.width}rem`;
+  card.style.height = `${geometry.height}rem`;
+  card.style.transform = `translate(${geometry.x}px, ${geometry.y}px)`;
+  card.style.zIndex = `${geometry.zIndex}`;
+}
+
+/**
+ * Updates geometry in the model and projects it onto the card.
+ * The sticky model stays the single source of truth; the DOM is only a view.
+ * @param {HTMLElement} card Card element.
+ * @param {Partial<CardGeometry>} patch Geometry fields to change.
+ * @returns {void}
+ */
+function commitCardGeometry(
+  card: HTMLElement,
+  patch: Partial<CardGeometry>,
+): void {
+  const sticky = stickys[card.id];
+  if (!sticky) return;
+
+  applyCardGeometry(card, { ...sticky, ...patch });
+  updateSticky(card.id, patch);
+}
+
+/**
+ * Returns whether a card is currently in edit mode.
+ * @param {HTMLElement} card Card element.
+ * @returns {boolean} True when the textarea is visible.
+ */
+function isCardEditing(card: HTMLElement): boolean {
+  const textarea = card.querySelector("textarea");
+  return textarea ? textarea.style.display !== "none" : false;
+}
+
+/**
+ * Returns whether the timeline layout mode is active.
+ * @returns {boolean} True when the timeline layout class is on the body.
+ */
+function isTimelineLayout(): boolean {
+  return document.body.classList.contains("layout-timeline");
+}
+
+/**
  * Deletes a sticky card and schedules persistence.
  * @param {string} id Sticky id.
  * @returns {void}
@@ -649,8 +700,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
 
   document.querySelectorAll<HTMLDivElement>(".card").forEach((card) => {
-    const textarea = card.querySelector("textarea");
-    if (!textarea || textarea.style.display === "none") return;
+    if (!isCardEditing(card)) return;
     toggleEditMode(card, false);
   });
 });
@@ -735,7 +785,6 @@ md.renderer.rules.image = (tokens, idx, options, _env, self) => {
 
     if (imageData) {
       token.attrSet("src", getImageObjectUrl(key, imageData));
-      token.attrSet("data-image-key", key);
     } else {
       token.attrSet("alt", "[missing image]");
     }
@@ -857,7 +906,7 @@ async function handleCopyCodeClick(button: HTMLButtonElement): Promise<void> {
  * @returns {boolean} Whether the card is docked or maximized.
  */
 function isCardTransformLocked(card: HTMLElement): boolean {
-  return isLayoutMode || card.classList.contains("card-maximized");
+  return isTimelineLayout() || card.classList.contains("card-maximized");
 }
 
 /**
@@ -937,8 +986,7 @@ function syncEditToggleButton(card: HTMLElement): void {
   const button = card.querySelector<HTMLButtonElement>(".card-edit-btn");
   if (!button) return;
 
-  const textarea = card.querySelector("textarea");
-  const isEditing = textarea?.style.display !== "none";
+  const isEditing = isCardEditing(card);
   const label = isEditing ? t.previewLabel : t.editLabel;
 
   button.innerHTML = isEditing ? previewIcon : editIcon;
@@ -983,15 +1031,14 @@ function toggleEditMode(card: HTMLElement, isEditing: boolean): void {
 function toggleAllToPreview(): void {
   const cards = document.querySelectorAll<HTMLDivElement>(".card");
   cards.forEach((card) => {
+    if (!isCardEditing(card)) return;
+
     const textarea = card.querySelector("textarea") as HTMLTextAreaElement;
     const preview = card.querySelector(".preview") as HTMLDivElement;
-
-    if (textarea.style.display !== "none") {
-      textarea.style.display = "none";
-      preview.style.display = "block";
-      preview.innerHTML = textToHtml(textarea.value);
-      syncEditToggleButton(card);
-    }
+    textarea.style.display = "none";
+    preview.style.display = "block";
+    preview.innerHTML = textToHtml(textarea.value);
+    syncEditToggleButton(card);
   });
 }
 
@@ -1019,14 +1066,8 @@ function createCard(
   const card = document.createElement("div");
   card.className = "card";
   card.id = id;
-  card.setAttribute("data-xy", `${x},${y}`);
-  card.setAttribute("data-size", `${width},${height}`);
-  card.setAttribute("data-zindex", `${zIndex}`);
   card.style.position = "absolute";
-  card.style.width = `${width}rem`;
-  card.style.height = `${height}rem`;
-  card.style.transform = `translate(${x}px, ${y}px)`;
-  card.style.zIndex = `${zIndex}`;
+  applyCardGeometry(card, { x, y, width, height, zIndex });
   cardElementMap.set(id, card);
 
   const resizeBtn = document.createElement("div");
@@ -1044,8 +1085,7 @@ function createCard(
   editBtn.innerHTML = editIcon;
   editBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    const textarea = card.querySelector("textarea");
-    const isEditing = textarea?.style.display !== "none";
+    const isEditing = isCardEditing(card);
     toggleEditMode(card, !isEditing);
   });
 
@@ -1071,7 +1111,7 @@ function createCard(
     if (confirm(t.deleteConfirm)) {
       deleteCard(id);
       card.remove();
-      if (isLayoutMode) {
+      if (isTimelineLayout()) {
         renderTimelineLayout();
       }
     }
@@ -1083,7 +1123,7 @@ function createCard(
 
   // 创建 textarea
   const textarea = document.createElement("textarea");
-  textarea.id = id;
+  textarea.id = `${id}-input`;
   textarea.value = text;
   textarea.addEventListener("input", (e) => {
     const target = e.target as HTMLTextAreaElement;
@@ -1147,11 +1187,11 @@ function createCard(
   });
 
   card.addEventListener("contextmenu", (e) => {
-    if (isLayoutMode) return;
+    if (isTimelineLayout()) return;
     const target = e.target as HTMLElement;
     if (target.closest("button") || target.closest(".resize")) return;
 
-    const isEditing = textarea.style.display !== "none";
+    const isEditing = isCardEditing(card);
     if (isEditing) return;
 
     e.preventDefault();
@@ -1163,7 +1203,7 @@ function createCard(
     bringCardToFront(card);
   });
   card.addEventListener("dblclick", (e) => {
-    if (!isLayoutMode) return;
+    if (!isTimelineLayout()) return;
     e.preventDefault();
     e.stopPropagation();
     setLayoutMode(false);
@@ -1215,7 +1255,7 @@ function finishCreateDragging(): void {
 
 // 监听鼠标按下事件，开始准备创建
 grid.addEventListener("mousedown", (e) => {
-  if (isLayoutMode) return;
+  if (isTimelineLayout()) return;
   // 只在直接点击 grid 时创建，不在卡片上创建
   if (e.target === grid) {
     isDraggingToCreate = true;
@@ -1227,7 +1267,7 @@ grid.addEventListener("mousedown", (e) => {
 
 // 监听鼠标移动事件，显示阴影
 grid.addEventListener("mousemove", (e) => {
-  if (isLayoutMode) return;
+  if (isTimelineLayout()) return;
   if (isDraggingToCreate) {
     const deltaX = e.clientX - startX;
     const deltaY = e.clientY - startY;
@@ -1266,7 +1306,7 @@ grid.addEventListener("mousemove", (e) => {
 
 // 监听鼠标释放事件，创建卡片
 grid.addEventListener("mouseup", () => {
-  if (isLayoutMode) return;
+  if (isTimelineLayout()) return;
   if (isDraggingToCreate) {
     // 只有在范围足够大时才创建卡片
     // 要求宽度和高度都至少达到 160px (10rem)
@@ -1303,7 +1343,7 @@ grid.addEventListener("mouseup", () => {
 });
 
 window.addEventListener("mouseup", () => {
-  if (isLayoutMode) return;
+  if (isTimelineLayout()) return;
   if (!isDraggingToCreate) return;
   finishCreateDragging();
 });
@@ -1371,13 +1411,7 @@ function getDefaultStickyLayout(
  */
 function bringCardToFront(card: HTMLElement): void {
   const maxZIndex = getMaxZIndex() + 1;
-  card.style.zIndex = `${maxZIndex}`;
-  card.setAttribute("data-zindex", `${maxZIndex}`);
-
-  const id = card.getAttribute("id");
-  if (id) {
-    updateSticky(id, { zIndex: maxZIndex });
-  }
+  commitCardGeometry(card, { zIndex: maxZIndex });
 }
 
 /**
@@ -1392,13 +1426,7 @@ function moveCardToViewportCenter(card: HTMLElement): void {
   const x = Math.max(0, Math.round(rawX / 16) * 16);
   const y = Math.max(0, Math.round(rawY / 16) * 16);
 
-  card.style.transform = `translate(${x}px, ${y}px)`;
-  card.setAttribute("data-xy", `${x},${y}`);
-
-  const id = card.getAttribute("id");
-  if (id) {
-    updateSticky(id, { x, y });
-  }
+  commitCardGeometry(card, { x, y });
 }
 
 /**
@@ -1538,7 +1566,6 @@ const settingsItems: HTMLElement[] = [sunnyToggle, downloadAction, uploadAction]
 const SETTINGS_ITEM_ANIMATION_STEP_MS = 45;
 const SETTINGS_ITEM_ANIMATION_DURATION_MS = 260;
 let settingsAnimationTimer: ReturnType<typeof setTimeout> | null = null;
-let isLayoutMode = false;
 let layoutPanel: HTMLDivElement | null = null;
 const dockedLayoutCardIds = new Set<string>();
 
@@ -1741,7 +1768,7 @@ function animateCardLayoutChange(
  * @returns {void}
  */
 function setLayoutMode(enabled: boolean): void {
-  if (enabled === isLayoutMode) return;
+  if (enabled === isTimelineLayout()) return;
   ensureLayoutPanel();
 
   // 先记录卡片位置并关闭过渡，布局切换后再用 FLIP 补间
@@ -1752,12 +1779,11 @@ function setLayoutMode(enabled: boolean): void {
     card.style.transition = "none";
   });
 
-  isLayoutMode = enabled;
-  document.body.classList.toggle("layout-timeline", isLayoutMode);
-  document.documentElement.classList.toggle("layout-timeline", isLayoutMode);
-  layoutIcon.classList.toggle("active", isLayoutMode);
+  document.body.classList.toggle("layout-timeline", enabled);
+  document.documentElement.classList.toggle("layout-timeline", enabled);
+  layoutIcon.classList.toggle("active", enabled);
 
-  if (isLayoutMode) {
+  if (enabled) {
     setSettingsExpanded(false);
     renderTimelineLayout();
   } else {
@@ -1773,7 +1799,7 @@ settingsIcon.addEventListener("click", () => {
 });
 
 layoutIcon.addEventListener("click", () => {
-  setLayoutMode(!isLayoutMode);
+  setLayoutMode(!isTimelineLayout());
 });
 
 // 导出功能
@@ -1988,15 +2014,7 @@ interact(".card")
         const width = (event.rect.width / 16) >> 0,
           height = (event.rect.height / 16) >> 0;
 
-        target.style.width = width + "rem";
-        target.style.height = height + "rem";
-
-        target.setAttribute("data-size", `${width},${height}`);
-
-        const id = target.getAttribute("id");
-        if (id) {
-          updateSticky(id, { width, height });
-        }
+        commitCardGeometry(target, { width, height });
       },
     },
   })
@@ -2031,35 +2049,23 @@ interact(".card")
         target.classList.remove("move");
         document.body.classList.remove("move");
 
-        let [x, y] = (target.getAttribute("data-xy") || "0,0")
-          .split(",")
-          .map((i) => Number(i));
-        x += event.dx;
-        y += event.dy;
-        target.style.transform = `translate(${x}px, ${y}px)`;
-        target.setAttribute("data-xy", `${x},${y}`);
-
-        const id = target.getAttribute("id");
-        if (id) {
-          updateSticky(id, { x, y });
-        }
+        const sticky = stickys[target.id];
+        if (!sticky) return;
+        commitCardGeometry(target, {
+          x: sticky.x + event.dx,
+          y: sticky.y + event.dy,
+        });
       },
 
       move(event) {
         if (isCardTransformLocked(event.target as HTMLElement)) return;
         const target = event.target as HTMLElement;
-        let [x, y] = (target.getAttribute("data-xy") || "0,0")
-          .split(",")
-          .map((i) => Number(i));
-        x += event.dx;
-        y += event.dy;
-        target.style.transform = `translate(${x}px, ${y}px)`;
-        target.setAttribute("data-xy", `${x},${y}`);
-
-        const id = target.getAttribute("id");
-        if (id) {
-          updateSticky(id, { x, y });
-        }
+        const sticky = stickys[target.id];
+        if (!sticky) return;
+        commitCardGeometry(target, {
+          x: sticky.x + event.dx,
+          y: sticky.y + event.dy,
+        });
       },
     },
   });

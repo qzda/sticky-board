@@ -52,6 +52,15 @@ In-memory stores:
 - `imageUrlCache: Map<string, string>` (Object URL cache for rendering)
 - `cardElementMap: Map<string, HTMLDivElement>`
 
+State ownership:
+
+- `stickys` is the single source of truth for card geometry (`x/y/width/height/zIndex`)
+- `applyCardGeometry()` projects model geometry onto a card element; `commitCardGeometry()` mutates the model and re-projects it
+- Cards do not mirror geometry into `data-xy` / `data-size` / `data-zindex` attributes
+- Edit state is read through `isCardEditing(card)` instead of checking `textarea.style.display` at each call site
+- Timeline state is derived from `body.layout-timeline` through `isTimelineLayout()`; there is no separate boolean flag
+- DOM ids: the card element id is the sticky id, and its textarea id is `${id}-input`
+
 Image reference format in markdown:
 
 - `![alt](sticky-image://<imageKey>)`
@@ -218,7 +227,7 @@ Maximize behavior:
   motion
 - Only one card can be maximized at a time; maximizing another card restores the previous one
 - While maximized, drag and resize listeners bail out via `isCardTransformLocked()`
-  (`isLayoutMode || .card-maximized`), so geometry stays untouched
+  (`isTimelineLayout() || .card-maximized`), so geometry stays untouched
 - Timeline mode keeps the same card chrome: `.layout-docked` shares the normal card
   styles apart from `max-height: 20rem`, so maximize/delete buttons stay visible and
   usable. It also hides the invisible `.resize` handle, so interact.js no longer
@@ -243,7 +252,8 @@ Using `interactjs`:
 - Drag snap: `16px` grid
 - Drag restriction: within `#root`
 - On drag/resize start: `bringCardToFront()`
-- On move/end: persist geometry (`x/y/width/height`)
+- On move/end: `commitCardGeometry()` updates the model first, then projects
+  `x/y/width/height` onto the card
 
 ### 7.3 Edit Entry
 
