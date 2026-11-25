@@ -45,6 +45,11 @@ import {
   resolveZipImagePath,
   toZipMarkdown,
 } from "./lib/zip";
+import {
+  applyChristmasTheme,
+  getInitialChristmasThemeState,
+  setChristmasThemeEnabled,
+} from "./ui/christmas-theme";
 
 /**
  * Detects UI language from browser locale.
@@ -68,6 +73,8 @@ const texts = {
     retry: "重试",
     retrying: "重试中…",
     dismiss: "关闭",
+    christmasNotice: "圣诞主题已自动开启，可在设置中关闭。",
+    christmasDisable: "关闭效果",
     sunnyTheme: "Sunny",
     layoutMode: "时间轴布局",
     exportLabel: "导出",
@@ -97,6 +104,8 @@ const texts = {
     retry: "Retry",
     retrying: "Retrying…",
     dismiss: "Dismiss",
+    christmasNotice: "Christmas theme is on for the season. You can turn it off in Settings.",
+    christmasDisable: "Turn off",
     sunnyTheme: "Sunny",
     layoutMode: "Timeline layout",
     exportLabel: "Export",
@@ -241,6 +250,53 @@ function hideStatusToast(): void {
  */
 function clearStatusOnSuccess(target: StatusTarget): void {
   if (statusTarget === target) hideStatusToast();
+}
+
+let christmasNotice: HTMLDivElement | null = null;
+
+/**
+ * Removes the seasonal auto-enable notice without changing the theme.
+ * @returns {void}
+ */
+function hideChristmasNotice(): void {
+  christmasNotice?.remove();
+  christmasNotice = null;
+}
+
+/**
+ * Shows a one-time notice when the Christmas theme was auto-enabled.
+ * @param {() => void} onDisable Action that turns the effect off.
+ * @returns {void}
+ */
+function showChristmasNotice(onDisable: () => void): void {
+  if (christmasNotice) return;
+
+  const notice = document.createElement("div");
+  notice.className = "christmas-notice";
+  notice.setAttribute("role", "status");
+  notice.setAttribute("aria-live", "polite");
+
+  const message = document.createElement("span");
+  message.textContent = t.christmasNotice;
+
+  const disableButton = document.createElement("button");
+  disableButton.type = "button";
+  disableButton.textContent = t.christmasDisable;
+  disableButton.addEventListener("click", () => {
+    onDisable();
+    hideChristmasNotice();
+  });
+
+  const dismissButton = document.createElement("button");
+  dismissButton.type = "button";
+  dismissButton.className = "christmas-notice-dismiss";
+  dismissButton.setAttribute("aria-label", t.dismiss);
+  dismissButton.textContent = "×";
+  dismissButton.addEventListener("click", hideChristmasNotice);
+
+  notice.append(message, disableButton, dismissButton);
+  document.body.appendChild(notice);
+  christmasNotice = notice;
 }
 
 /**
@@ -1193,6 +1249,7 @@ function createCard(
   card.className = "card";
   card.id = id;
   card.style.position = "absolute";
+  card.setAttribute("data-weather-surface", "");
   applyCardGeometry(card, { x, y, width, height, zIndex });
   cardElementMap.set(id, card);
 
@@ -1729,6 +1786,35 @@ sunnyToggleText.textContent = t.sunnyTheme;
 sunnyToggle.appendChild(sunnyToggleInput);
 sunnyToggle.appendChild(sunnyToggleText);
 
+const christmasToggle = document.createElement("label");
+christmasToggle.className = "sunny-toggle christmas-toggle";
+christmasToggle.style.display = "none";
+christmasToggle.title = "Christmas";
+
+const christmasToggleInput = document.createElement("input");
+christmasToggleInput.type = "checkbox";
+const christmasState = getInitialChristmasThemeState();
+christmasToggleInput.checked = christmasState.enabled;
+applyChristmasTheme(christmasState.enabled);
+christmasToggleInput.addEventListener("change", () => {
+  const enabled = christmasToggleInput.checked;
+  setChristmasThemeEnabled(enabled);
+  if (!enabled) hideChristmasNotice();
+  setSettingsExpanded(false);
+});
+
+if (christmasState.autoEnabled) {
+  showChristmasNotice(() => {
+    christmasToggleInput.checked = false;
+    setChristmasThemeEnabled(false);
+  });
+}
+
+const christmasToggleText = document.createElement("span");
+christmasToggleText.textContent = "Christmas";
+christmasToggle.appendChild(christmasToggleInput);
+christmasToggle.appendChild(christmasToggleText);
+
 // 创建 GitHub 链接
 const githubLink = document.createElement("a");
 githubLink.href = "https://github.com/qzda/sticky-board";
@@ -1737,6 +1823,7 @@ githubLink.appendChild(createSvgElement(github, { alt: "github" }));
 
 // 添加到容器
 settingsContainer.appendChild(sunnyToggle);
+settingsContainer.appendChild(christmasToggle);
 settingsContainer.appendChild(downloadAction);
 settingsContainer.appendChild(uploadAction);
 settingsContainer.appendChild(settingsIcon);
@@ -1744,7 +1831,12 @@ settingsContainer.appendChild(layoutIcon);
 settingsContainer.appendChild(githubLink);
 
 let isExpanded = false;
-const settingsItems: HTMLElement[] = [sunnyToggle, downloadAction, uploadAction];
+const settingsItems: HTMLElement[] = [
+  sunnyToggle,
+  christmasToggle,
+  downloadAction,
+  uploadAction,
+];
 let settingsAnimationTimer: ReturnType<typeof setTimeout> | null = null;
 let layoutPanel: HTMLDivElement | null = null;
 const dockedLayoutCardIds = new Set<string>();

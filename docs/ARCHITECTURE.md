@@ -383,6 +383,7 @@ ID 解析规则：
 设置项：
 
 - Sunny 开关
+- Christmas 开关（默认关闭，12 月自动开启一次）
 - Export 按钮
 - Import 按钮
 - Layout 切换按钮
@@ -419,7 +420,22 @@ Settings 与 Layout 图标是 `<button>`（带 `aria-label`），可键盘聚焦
 
 - 动态卡片堆叠仍使用模型中的 `zIndex`；`applyCardGeometry()` 会把它内联设置到卡片上
 
-## 13.1 布局常量
+### 13.1 圣诞季主题
+
+- 开关位于设置面板，`localStorage` key 为 `christmasThemeEnabled`：`"1"` 表示开启，`"0"` 表示用户主动关闭，缺失表示尚未选择
+- 默认关闭；仅当日期在 12 月且没有用户选择时，首次加载自动开启一次，并显示顶部提示“圣诞主题已自动开启，可在设置中关闭”
+- 自动开启会记录 `christmasThemeAutoSeason`（如 `"2026-12"`），同一个月刷新不再重复提示；用户点击“关闭效果”或关闭开关会写入 `"0"`，之后不再自动开启
+- 自动开启的选择在 12 月内保持；进入 1 月后，若仍是自动开启状态则自动关闭；用户手动开启（`"1"`）不会被季节结束覆盖
+- `src/ui/christmas-theme.ts` 负责读取/写入设置、切换 `body.christmas-theme`、创建或销毁天气引擎
+- 雪花与便签表面积雪由 `@fluritheme/fluri@0.2.1` 提供：Canvas 2D、DOM-aware 积雪、指针扫雪、雪花滑落，无网络请求
+- 0.2.1 是本项目锁定的 MIT 旧版本；0.3.x 起为商业许可，不能直接升级
+- 便签创建时带 `data-weather-surface`，Fluri 使用 `dom.detection: "explicit"`，只让卡片本身承接积雪，不覆盖操作按钮和设置
+- 参数为 `gentle-snow`、`intensity: 0.55`、`particleCount: 520`、`maxDepth: 14`、`growthRate: 0.6`，保持雪花清晰但积雪克制
+- 圣诞主题把画布切为深色冬夜渐变，雪花在深色背景上呈白色实体；设置面板同步使用深色半透明按钮
+- `prefers-reduced-motion: reduce` 交给 Fluri 的 `accessibility.reducedMotion: "respect"` 处理
+- 关闭主题会移除 `body.christmas-theme` 并 `destroy()` 天气实例，清空 canvas 与积雪；再次开启会重建实例
+
+### 13.2 布局常量
 
 `src/constants.ts` 集中定义交互和持久化共用的数字：
 

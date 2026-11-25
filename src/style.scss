@@ -74,6 +74,41 @@ body {
       opacity: 0.75;
     }
   }
+
+  &.christmas-theme {
+    --color: #e8f1ff;
+    color: #e8f1ff;
+    background-color: #0b1422;
+    background-image:
+      radial-gradient(ellipse at 50% -10%, #29456b 0%, transparent 55%),
+      radial-gradient(rgba(160, 190, 220, 0.3) 1px, transparent 1px);
+    background-size: auto, 1rem 1rem;
+    background-position: 0 0, 0.5rem 0.5rem;
+
+    #root {
+      background-color: #0b1422;
+      background-image:
+        radial-gradient(ellipse at 50% -10%, #29456b 0%, transparent 55%),
+        radial-gradient(rgba(160, 190, 220, 0.3) 1px, transparent 1px);
+      background-size: auto, 1rem 1rem;
+      background-position: 0 0, 0.5rem 0.5rem;
+    }
+
+    #settings {
+      > * {
+        color: #e8f1ff;
+        opacity: 0.92;
+      }
+
+      .sunny-toggle,
+      .settings-action {
+        background: rgba(26, 41, 62, 0.92);
+        border-color: rgba(210, 230, 255, 0.55);
+        color: #e8f1ff;
+        backdrop-filter: blur(8px);
+      }
+    }
+  }
 }
 
 .card {
@@ -389,6 +424,12 @@ body {
   }
 }
 
+body.christmas-theme .card {
+  box-shadow:
+    1rem 1rem 1rem rgba(0, 0, 0, 0.34),
+    -0.5rem -0.5rem 0.5rem rgba(0, 0, 0, 0.18);
+}
+
 #settings {
   position: fixed;
   right: 1rem;
@@ -684,6 +725,63 @@ body {
 
   .card.layout-docked {
     width: min(18rem, calc(100vw - 2.5rem)) !important;
+  }
+}
+
+.christmas-notice {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-status-toast);
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  max-width: min(92vw, 38rem);
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgba(210, 230, 255, 0.5);
+  border-radius: 0.8rem;
+  background: rgba(26, 41, 62, 0.94);
+  color: #e8f1ff;
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(8px);
+  font-size: 0.9rem;
+
+  span {
+    line-height: 1.4;
+  }
+
+  button {
+    flex-shrink: 0;
+    border: 1px solid rgba(210, 230, 255, 0.55);
+    border-radius: 0.45rem;
+    background: transparent;
+    color: inherit;
+    padding: 0.35rem 0.55rem;
+    cursor: pointer;
+
+    &:hover {
+      background: rgba(210, 230, 255, 0.12);
+    }
+  }
+
+  .christmas-notice-dismiss {
+    border: none;
+    padding: 0.15rem 0.3rem;
+    font-size: 1.15rem;
+    line-height: 1;
+  }
+}
+
+@media (max-width: 600px) {
+  .christmas-notice {
+    flex-wrap: wrap;
+    justify-content: center;
+    text-align: center;
+
+    span {
+      flex-basis: 100%;
+    }
   }
 }
 

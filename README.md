@@ -22,6 +22,7 @@ All data is stored locally only. No account required, no synchronization needed 
 - 💾 **Auto Save** – All changes are saved automatically
 - 📤 **Import / Export** – Stickies and pasted images are exported as a ZIP (Markdown + images + config)
 - 🌤️ **Sunny Theme** – Optional animated leaves shadow overlay
+- 🎄 **Christmas Theme** – Surface snow, auto-enabled in December with a one-time notice
 - 🌓 **Dark Mode** – Automatically follows the system theme
 - 🌍 **Multi-language** – Automatically switches between Chinese and English based on browser language
 

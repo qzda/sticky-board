@@ -17,6 +17,7 @@
   },
   "packageManager": "pnpm@12.6.0",
   "dependencies": {
+    "@fluritheme/fluri": "0.2.1",
     "interactjs": "^1.10.27",
     "jszip": "^3.10.1",
     "markdown-it": "^14.1.0"

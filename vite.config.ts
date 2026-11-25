@@ -7,6 +7,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           dependencies: [
+            "@fluritheme/fluri",
             "interactjs",
             "markdown-it",
             "jszip",
