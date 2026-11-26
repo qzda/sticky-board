@@ -14,6 +14,8 @@ import maximizeIcon from "./assets/LucideMaximize.svg?raw";
 import minimizeIcon from "./assets/LucideMinimize.svg?raw";
 import editIcon from "./assets/LucideSquarePen.svg?raw";
 import previewIcon from "./assets/LucideEye.svg?raw";
+import arrowLeftIcon from "./assets/LucideArrowLeft.svg?raw";
+import arrowRightIcon from "./assets/LucideArrowRight.svg?raw";
 import leavesVideo from "./assets/leaves.mp4";
 import {
   COPY_FEEDBACK_MS,
@@ -75,6 +77,9 @@ const texts = {
     dismiss: "关闭",
     christmasNotice: "圣诞主题已自动开启，可在设置中关闭。",
     christmasDisable: "关闭效果",
+    imagePreviewLabel: "图片预览",
+    previousImage: "上一张",
+    nextImage: "下一张",
     sunnyTheme: "Sunny",
     layoutMode: "时间轴布局",
     exportLabel: "导出",
@@ -90,7 +95,7 @@ const texts = {
     missingImage: "图片缺失",
     settingsLabel: "设置",
     defaultText:
-      "## Hi naonao\n- 右键卡片进入编辑模式，按 Esc 退出编辑\n- 点击顶栏按钮可切换编辑/预览\n- 点击页面空白处预览\n- 按住顶部移动位置\n- 按住右下角调整大小\n- 点击右上角按钮可最大化/还原便签\n- 代码块右上角支持一键复制\n- 支持粘贴图片（单张不超过 20MB）",
+      "## Hi naonao\n- 点击顶栏按钮切换编辑/预览，按 Esc 退出编辑\n- 点击页面空白处预览\n- 按住顶部移动位置\n- 按住右下角调整大小\n- 点击右上角按钮可最大化/还原便签\n- 代码块右上角支持一键复制\n- 支持粘贴图片（单张不超过 20MB）",
   },
   en: {
     deleteConfirm: "Are you sure you want to delete this note?",
@@ -106,6 +111,9 @@ const texts = {
     dismiss: "Dismiss",
     christmasNotice: "Christmas theme is on for the season. You can turn it off in Settings.",
     christmasDisable: "Turn off",
+    imagePreviewLabel: "Image preview",
+    previousImage: "Previous image",
+    nextImage: "Next image",
     sunnyTheme: "Sunny",
     layoutMode: "Timeline layout",
     exportLabel: "Export",
@@ -122,7 +130,7 @@ const texts = {
     missingImage: "Missing image",
     settingsLabel: "Settings",
     defaultText:
-      "## Hi naonao\n- Right-click a card to edit, press Esc to exit editing\n- Use the top-bar button to switch between edit and preview\n- Click any empty area to preview\n- Drag the top area to move the card\n- Drag the bottom-right corner to resize\n- Use the top-right button to maximize/restore the note\n- Code blocks have a one-click copy button\n- Paste image is supported (up to 20MB each)",
+      "## Hi naonao\n- Use the top-bar button to switch between edit and preview, press Esc to exit editing\n- Click any empty area to preview\n- Drag the top area to move the card\n- Drag the bottom-right corner to resize\n- Use the top-right button to maximize/restore the note\n- Code blocks have a one-click copy button\n- Paste image is supported (up to 20MB each)",
   },
 };
 
@@ -805,8 +813,15 @@ function syncSunnyVideoPlayback(): void {
   sunnyVideoElement.pause();
 }
 
+type ImagePreviewItem = { src: string; alt: string };
+
 let imagePreviewOverlay: HTMLDivElement | null = null;
 let imagePreviewElement: HTMLImageElement | null = null;
+let imagePreviewPrevButton: HTMLButtonElement | null = null;
+let imagePreviewNextButton: HTMLButtonElement | null = null;
+let imagePreviewCounter: HTMLSpanElement | null = null;
+let imagePreviewItems: ImagePreviewItem[] = [];
+let imagePreviewIndex = 0;
 let sunnyVideoOverlay: HTMLDivElement | null = null;
 let sunnyVideoElement: HTMLVideoElement | null = null;
 
@@ -836,48 +851,156 @@ function ensureSunnyVideoOverlay(): void {
 }
 
 /**
+ * Creates one gallery navigation button.
+ * @param {string} className Extra class for the button.
+ * @param {string} label Accessible label and tooltip.
+ * @param {string} icon SVG markup.
+ * @returns {HTMLButtonElement} Navigation button.
+ */
+function createImagePreviewNavButton(
+  className: string,
+  label: string,
+  icon: string,
+): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `image-preview-nav ${className}`;
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  button.innerHTML = icon;
+  return button;
+}
+
+/**
+ * Closes the image preview modal and drops the current gallery.
+ * @returns {void}
+ */
+function closeImagePreview(): void {
+  imagePreviewOverlay?.classList.remove("open");
+  imagePreviewItems = [];
+  imagePreviewIndex = 0;
+}
+
+/**
+ * Shows one gallery item, wrapping around at both ends.
+ * @param {number} index Requested item index.
+ * @returns {void}
+ */
+function showImagePreviewAt(index: number): void {
+  if (!imagePreviewElement || !imagePreviewItems.length) return;
+
+  const length = imagePreviewItems.length;
+  imagePreviewIndex = ((index % length) + length) % length;
+  const item = imagePreviewItems[imagePreviewIndex];
+
+  imagePreviewElement.src = item.src;
+  imagePreviewElement.alt = item.alt;
+
+  const multiple = length > 1;
+  if (imagePreviewPrevButton) imagePreviewPrevButton.hidden = !multiple;
+  if (imagePreviewNextButton) imagePreviewNextButton.hidden = !multiple;
+  if (imagePreviewCounter) {
+    imagePreviewCounter.hidden = !multiple;
+    imagePreviewCounter.textContent = multiple
+      ? `${imagePreviewIndex + 1} / ${length}`
+      : "";
+  }
+}
+
+/**
  * Lazily creates image preview overlay.
  * @returns {void}
  */
 function ensureImagePreviewOverlay(): void {
   if (imagePreviewOverlay && imagePreviewElement) return;
 
-  imagePreviewOverlay = document.createElement("div");
-  imagePreviewOverlay.className = "image-preview-overlay";
+  const overlay = document.createElement("div");
+  overlay.className = "image-preview-overlay";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", t.imagePreviewLabel);
 
-  imagePreviewElement = document.createElement("img");
-  imagePreviewElement.className = "image-preview-image";
-  imagePreviewElement.referrerPolicy = "no-referrer";
+  const prevButton = createImagePreviewNavButton(
+    "image-preview-prev",
+    t.previousImage,
+    arrowLeftIcon,
+  );
+  prevButton.addEventListener("click", (e) => {
+    e.stopPropagation();
+    showImagePreviewAt(imagePreviewIndex - 1);
+  });
 
-  imagePreviewOverlay.appendChild(imagePreviewElement);
-  imagePreviewOverlay.addEventListener("click", (e) => {
-    if (e.target === imagePreviewOverlay) {
-      imagePreviewOverlay?.classList.remove("open");
-    }
+  const image = document.createElement("img");
+  image.className = "image-preview-image";
+  image.referrerPolicy = "no-referrer";
+  image.addEventListener("click", (e) => {
+    e.stopPropagation();
+  });
+
+  const nextButton = createImagePreviewNavButton(
+    "image-preview-next",
+    t.nextImage,
+    arrowRightIcon,
+  );
+  nextButton.addEventListener("click", (e) => {
+    e.stopPropagation();
+    showImagePreviewAt(imagePreviewIndex + 1);
+  });
+
+  const counter = document.createElement("span");
+  counter.className = "image-preview-counter";
+  counter.setAttribute("aria-live", "polite");
+
+  overlay.append(prevButton, image, nextButton, counter);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeImagePreview();
   });
 
   document.addEventListener("keydown", (e) => {
+    if (!overlay.classList.contains("open")) return;
+
     if (e.key === "Escape") {
-      imagePreviewOverlay?.classList.remove("open");
+      closeImagePreview();
+      return;
+    }
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      showImagePreviewAt(imagePreviewIndex - 1);
+      return;
+    }
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      showImagePreviewAt(imagePreviewIndex + 1);
     }
   });
 
-  document.body.appendChild(imagePreviewOverlay);
+  document.body.appendChild(overlay);
+
+  imagePreviewOverlay = overlay;
+  imagePreviewElement = image;
+  imagePreviewPrevButton = prevButton;
+  imagePreviewNextButton = nextButton;
+  imagePreviewCounter = counter;
 }
 
 /**
- * Opens image preview modal.
- * @param {string} src Image source URL.
- * @param {string} [alt=""] Image alt text.
+ * Opens the image preview modal with an optional gallery.
+ * @param {ImagePreviewItem[]} items Images in display order.
+ * @param {number} [startIndex=0] Index of the clicked image.
  * @returns {void}
  */
-function openImagePreview(src: string, alt: string = ""): void {
-  ensureImagePreviewOverlay();
-  if (!imagePreviewOverlay || !imagePreviewElement) return;
+function openImagePreview(
+  items: ImagePreviewItem[],
+  startIndex: number = 0,
+): void {
+  if (!items.length) return;
 
-  imagePreviewElement.src = src;
-  imagePreviewElement.alt = alt;
+  ensureImagePreviewOverlay();
+  if (!imagePreviewOverlay) return;
+
+  imagePreviewItems = items;
   imagePreviewOverlay.classList.add("open");
+  showImagePreviewAt(startIndex);
 }
 
 const md = new MarkdownIt({
@@ -1355,21 +1478,17 @@ function createCard(
     if (target.tagName !== "IMG") return;
     e.stopPropagation();
     const image = target as HTMLImageElement;
-    openImagePreview(image.currentSrc || image.src, image.alt);
+    const images = Array.from(preview.querySelectorAll<HTMLImageElement>("img"));
+    const index = images.indexOf(image);
+    openImagePreview(
+      images.map((item) => ({
+        src: item.currentSrc || item.src,
+        alt: item.alt,
+      })),
+      index < 0 ? 0 : index,
+    );
   });
 
-  card.addEventListener("contextmenu", (e) => {
-    if (isTimelineLayout()) return;
-    const target = e.target as HTMLElement;
-    if (target.closest("button") || target.closest(".resize")) return;
-
-    const isEditing = isCardEditing(card);
-    if (isEditing) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-    toggleEditMode(card, true);
-  });
   card.addEventListener("click", (e) => {
     if ((e.target as HTMLElement).closest("button")) return;
     bringCardToFront(card);
@@ -1428,6 +1547,7 @@ function finishCreateDragging(): void {
 // 监听鼠标按下事件，开始准备创建
 grid.addEventListener("mousedown", (e) => {
   if (isTimelineLayout()) return;
+  if (e.button !== 0) return;
   // 只在直接点击 grid 时创建，不在卡片上创建
   if (e.target === grid) {
     isDraggingToCreate = true;
@@ -1635,6 +1755,7 @@ function bindGlobalEvents(): void {
   // Esc 退出编辑模式（最大化铺满视口时无法点击空白处预览）
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
+    if (imagePreviewOverlay?.classList.contains("open")) return;
 
     document.querySelectorAll<HTMLDivElement>(".card").forEach((card) => {
       if (!isCardEditing(card)) return;

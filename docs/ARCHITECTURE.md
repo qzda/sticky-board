@@ -171,7 +171,10 @@ sequenceDiagram
 ### 6.3 图片全屏预览
 
 - 点击预览中的图片会打开模态遮罩层
-- 通过点击背景或 `Escape` 关闭
+- 收集同一张便签预览区内所有 `<img>`，按出现顺序组成画廊；点击的图片作为当前项
+- 多于一张时显示左右切换按钮和 `当前 / 总数` 计数器，切换在首尾循环；按钮图标为 `LucideArrowLeft` / `LucideArrowRight`
+- 支持键盘 `ArrowLeft` / `ArrowRight` 切换，`Escape` 或点击背景关闭
+- 遮罩层设置 `role="dialog"` 与 `aria-modal="true"`，切换按钮和计数器使用本地化 label
 
 ### 6.4 代码块复制
 
@@ -196,7 +199,7 @@ sequenceDiagram
 
 按钮位于顶部边框条（高 `1.4rem`）内的 `.card-actions` 中：
 
-- `.card-edit-btn`：切换该卡片的编辑/预览。预览时显示 `LucideSquarePen`（点击进入编辑），编辑时显示 `LucideEye`（点击进入预览）；label 和 `aria-label` 跟随动作变化。当模式从其他入口（右键、Esc、点击空白区域、初始渲染）变化时，`syncEditToggleButton()` 会重新同步图标
+- `.card-edit-btn`：切换该卡片的编辑/预览。预览时显示 `LucideSquarePen`（点击进入编辑），编辑时显示 `LucideEye`（点击进入预览）；label 和 `aria-label` 跟随动作变化。当模式从其他入口（Esc、点击空白区域、初始渲染）变化时，`syncEditToggleButton()` 会重新同步图标
 - `.card-maximize-btn`：最大化/还原，图标在 `LucideMaximize` 和 `LucideMinimize` 之间切换，label 在"最大化"和"还原"之间切换（已本地化）
 - `.card-close-btn`：确认后删除，图标为 `LucideX`
 - 三个按钮与代码块复制按钮使用相同的 `1.4rem` 点击区域；关闭图标为 `1.3rem`，通过 flex 的 `align-items: center` 在顶部条中垂直居中
@@ -217,7 +220,7 @@ sequenceDiagram
 
 ### 7.1 在空白画布上拖拽创建卡片
 
-- 在 `#root` 上 `mousedown` 进入绘制模式（仅当 target 是 root 本身）
+- 在 `#root` 上左键 `mousedown` 进入绘制模式（仅当 target 是 root 本身）
 - `mousemove` 显示虚线阴影框
 - 当尺寸 >= `MIN_CARD_SIZE_PX x MIN_CARD_SIZE_PX` 时，`mouseup` 创建卡片
 - 尺寸通过 `/ REM_IN_PX` 转换为 rem
@@ -238,8 +241,7 @@ sequenceDiagram
 
 ### 7.3 进入编辑
 
-- 右键卡片进入编辑模式（删除按钮/缩放手柄除外）
-- 顶栏 `.card-edit-btn` 无需右键菜单即可切换编辑/预览
+- 顶栏 `.card-edit-btn` 切换编辑/预览，不再用右键进入编辑；右键在预览模式保留浏览器原生菜单，可直接复制图片
 - `setCardEditing(card, editing)` 是顶栏切换和点击空白区域预览动作的唯一实现
 - 进入编辑模式后在下一帧（`requestAnimationFrame`）聚焦 textarea，避免固定 200ms 延迟抢走用户已转移的焦点
 - 左键点击卡片会把它提升到最高 z-index
